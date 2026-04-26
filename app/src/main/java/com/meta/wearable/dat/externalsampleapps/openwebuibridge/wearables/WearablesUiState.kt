@@ -28,6 +28,7 @@ data class WearablesUiState(
     val devices: ImmutableList<DeviceIdentifier> = persistentListOf(),
     val recentError: String? = null,
     val isStreaming: Boolean = false,
+    val isCompanionMode: Boolean = false,
     val isDebugMenuVisible: Boolean = false,
     val isGettingStartedSheetVisible: Boolean = false,
     val hasActiveDevice: Boolean = false,

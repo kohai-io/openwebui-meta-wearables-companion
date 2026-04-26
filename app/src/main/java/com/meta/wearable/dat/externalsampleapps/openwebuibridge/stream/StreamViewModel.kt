@@ -710,22 +710,44 @@ class StreamViewModel(
     _uiState.update { it.copy(isListeningForVoice = false) }
   }
 
-  fun startStream() {
+  fun startStream(forceRestart: Boolean = false) {
+    if (forceRestart) {
+      stopWearablesSession()
+      isStoppingBridge = false
+    }
+
     if (session != null) {
+      Log.d(TAG, "Bridge session already exists with state=${session?.state?.value}")
       return
     }
 
     isStoppingBridge = false
+    _uiState.update { it.copy(isBridgeStarting = true, isBridgeRunning = false, openWebUiError = null) }
     if (session == null) {
       Wearables.createSession(deviceSelector)
           .onSuccess { createdSession ->
             session = createdSession
             session?.start()
           }
-          .onFailure { error, _ -> Log.e(TAG, "Failed to create session: ${error.description}") }
-      if (session == null) return
+          .onFailure { error, _ ->
+            _uiState.update {
+              it.copy(
+                  isBridgeStarting = false,
+                  isBridgeRunning = false,
+                  openWebUiError = "Failed to create glasses session: ${error.description}",
+              )
+            }
+            Log.e(TAG, "Failed to create session: ${error.description}")
+          }
+      if (session == null) {
+        return
+      }
     }
     startBridgeSessionMonitor()
+  }
+
+  fun retryWearablesSession() {
+    startStream(forceRestart = true)
   }
 
   fun toggleCameraStream() {
@@ -753,7 +775,13 @@ class StreamViewModel(
     sessionStateJob =
         viewModelScope.launch {
           session?.state?.collect { currentState ->
-            _uiState.update { it.copy(isBridgeRunning = currentState == DeviceSessionState.STARTED) }
+            _uiState.update {
+              it.copy(
+                  isBridgeStarting = currentState != DeviceSessionState.STARTED &&
+                      currentState != DeviceSessionState.STOPPED,
+                  isBridgeRunning = currentState == DeviceSessionState.STARTED,
+              )
+            }
             if (currentState == DeviceSessionState.STARTED) {
               if (isCameraStreamRequested && stream == null) {
                 startCameraStreamInternal()
@@ -761,11 +789,10 @@ class StreamViewModel(
             } else if (currentState == DeviceSessionState.STOPPED) {
               stopCameraStream()
               session = null
+              _uiState.update { it.copy(isBridgeStarting = false, isBridgeRunning = false) }
               if (isStoppingCameraOnly && !isStoppingBridge) {
                 isStoppingCameraOnly = false
                 startStream()
-              } else if (!isStoppingBridge) {
-                wearablesViewModel.navigateToDeviceSelection()
               }
             }
           }
@@ -822,9 +849,8 @@ class StreamViewModel(
                 stream?.errorStream?.collect { error ->
                   Log.d(TAG, "Stream error received: $error (description: ${error.description})")
                   if (error == StreamError.HINGE_CLOSED) {
-                    Log.d(TAG, "HINGE_CLOSED detected, stopping bridge")
-                    stopStream()
-                    wearablesViewModel.navigateToDeviceSelection()
+                    Log.d(TAG, "HINGE_CLOSED detected, stopping wearables session")
+                    stopWearablesSession()
                   }
                 }
               }
@@ -855,7 +881,7 @@ class StreamViewModel(
     _uiState.update { it.copy(streamSessionState = StreamSessionState.STOPPED, videoFrame = null) }
   }
 
-  fun stopStream() {
+  fun stopWearablesSession() {
     isStoppingBridge = true
     stopVoiceAsk()
     stopSpeakingResponse()
@@ -864,6 +890,8 @@ class StreamViewModel(
     sessionStateJob = null
     _uiState.update {
         initialState.copy(
+          isBridgeRunning = false,
+          isBridgeStarting = false,
           openWebUiBaseUrl = it.openWebUiBaseUrl,
           openWebUiApiKey = it.openWebUiApiKey,
           openWebUiModel = it.openWebUiModel,
@@ -883,6 +911,10 @@ class StreamViewModel(
     }
     session?.stop()
     session = null
+  }
+
+  fun stopStream() {
+    stopWearablesSession()
   }
 
   fun capturePhoto() {

@@ -149,7 +149,7 @@ class WearablesViewModel(application: Application) : AndroidViewModel(applicatio
 
       val permissionStatus = result.getOrNull()
       if (permissionStatus == PermissionStatus.Granted) {
-        _uiState.update { it.copy(isStreaming = true) }
+        _uiState.update { it.copy(isStreaming = true, isCompanionMode = false) }
         return@launch
       }
 
@@ -160,7 +160,7 @@ class WearablesViewModel(application: Application) : AndroidViewModel(applicatio
           setRecentError("Permission denied")
         }
         PermissionStatus.Granted -> {
-          _uiState.update { it.copy(isStreaming = true) }
+          _uiState.update { it.copy(isStreaming = true, isCompanionMode = false) }
         }
       }
     }
@@ -184,6 +184,10 @@ class WearablesViewModel(application: Application) : AndroidViewModel(applicatio
 
   fun navigateToDeviceSelection() {
     _uiState.update { it.copy(isStreaming = false) }
+  }
+
+  fun enterCompanionMode() {
+    _uiState.update { it.copy(isCompanionMode = true, isStreaming = false) }
   }
 
   fun updateAppThemeMode(themeMode: AppThemeMode) {

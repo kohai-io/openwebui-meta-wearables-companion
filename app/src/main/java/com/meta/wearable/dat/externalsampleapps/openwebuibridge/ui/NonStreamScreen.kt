@@ -182,6 +182,10 @@ fun NonStreamScreen(
             onClick = { viewModel.navigateToStreaming(onRequestWearablesPermission) },
             enabled = uiState.hasActiveDevice,
         )
+        SwitchButton(
+            label = stringResource(R.string.use_without_glasses_button_title),
+            onClick = { viewModel.enterCompanionMode() },
+        )
       }
 
       // Getting Started Sheet

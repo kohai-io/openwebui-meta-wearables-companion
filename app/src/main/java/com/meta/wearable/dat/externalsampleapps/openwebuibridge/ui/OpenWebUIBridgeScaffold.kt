@@ -79,9 +79,10 @@ fun OpenWebUIBridgeScaffold(
   Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
     Box(modifier = Modifier.fillMaxSize()) {
       when {
-        uiState.isStreaming ->
+        uiState.isStreaming || uiState.isCompanionMode ->
             StreamScreen(
                 wearablesViewModel = viewModel,
+                onRequestWearablesPermission = onRequestWearablesPermission,
             )
         uiState.isRegistered ->
             NonStreamScreen(

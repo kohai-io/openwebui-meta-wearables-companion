@@ -25,7 +25,9 @@
     <!-- Home Screen -->
     <string name="register_button_title" description="Connect App">Connect my glasses</string>
     <string name="unregister_button_title" description="Disconnect App">Disconnect</string>
+    <string name="use_without_glasses_button_title" description="Use app without glasses">Use without glasses</string>
     <string name="stream_button_title" description="Start streaming">Start bridge</string>
+    <string name="start_bridge_button_title" description="Start bridge">Start bridge</string>
     <string name="stop_stream_button_title" description="Stop streaming">Stop streaming</string>
     <string name="stop_bridge_button_title" description="Stop bridge">Stop bridge</string>
     <string name="start_camera_stream_button_title" description="Start camera stream">Start camera</string>
@@ -46,6 +48,11 @@
     <string name="glasses_context_title" description="Glasses context panel title">Meta glasses context</string>
     <string name="glasses_context_live" description="Glasses camera live status">Live camera frame attached to snapshot asks</string>
     <string name="glasses_context_standby" description="Glasses camera standby status">Start the camera to attach what the glasses can see</string>
+    <string name="glasses_not_registered" description="Glasses registration status">Glasses not connected. Open WebUI chat is still available.</string>
+    <string name="glasses_connecting" description="Glasses session connecting status">Glasses detected. Connecting camera session...</string>
+    <string name="glasses_discovered_inactive" description="Glasses discovered but inactive status">Glasses are known to the app, but DAT reports them powered off or disconnected.</string>
+    <string name="glasses_detected_bridge_idle" description="Glasses detected but bridge not started status">Glasses detected. Start the bridge to enable camera features.</string>
+    <string name="glasses_connected" description="Glasses session connected status">Glasses connected. Camera features are available.</string>
     <string name="chat_empty_title" description="Empty chat screen title">Start a glasses-aware chat</string>
     <string name="openwebui_base_url" description="Open WebUI API endpoint">Open WebUI API endpoint</string>
     <string name="openwebui_api_key" description="Open WebUI API key">API key</string>

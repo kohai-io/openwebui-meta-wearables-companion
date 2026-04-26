@@ -100,6 +100,7 @@ fun ChatTab(
     onSelectChat: (OpenWebUiChatSummary) -> Unit,
     onOpenChatMenu: () -> Unit,
     onNewChat: () -> Unit,
+    isCameraAvailable: Boolean,
     onSnapshotAsk: () -> Unit,
     onToggleCamera: () -> Unit,
     onQuickPrompt: (String) -> Unit,
@@ -174,6 +175,7 @@ fun ChatTab(
     InteractionMenu(
         listening = state.isListeningForVoice,
         streamState = state.streamSessionState,
+        cameraAvailable = isCameraAvailable,
         busy = state.isAskingOpenWebUi,
         capturing = state.isCapturing,
         onSpeak = if (state.isListeningForVoice) onStopListening else onMicTap,
@@ -1098,6 +1100,7 @@ private fun QuickChip(
 private fun InteractionMenu(
     listening: Boolean,
     streamState: StreamSessionState,
+    cameraAvailable: Boolean,
     busy: Boolean,
     capturing: Boolean,
     onSpeak: () -> Unit,
@@ -1115,8 +1118,8 @@ private fun InteractionMenu(
       ),
       label = "interact-pulse",
   )
-  val streamEnabled = streamState != StreamSessionState.STARTING
-  val snapshotEnabled = streamState == StreamSessionState.STREAMING && !busy && !capturing
+  val streamEnabled = cameraAvailable && streamState != StreamSessionState.STARTING
+  val snapshotEnabled = cameraAvailable && streamState == StreamSessionState.STREAMING && !busy && !capturing
 
   Column(
       modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 12.dp),

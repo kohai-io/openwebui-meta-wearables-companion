@@ -29,6 +29,7 @@ enum class SnapshotImageQuality(
 
 data class StreamUiState(
     val isBridgeRunning: Boolean = false,
+    val isBridgeStarting: Boolean = false,
     val streamSessionState: StreamSessionState = StreamSessionState.STOPPED,
     val videoFrame: Bitmap? = null,
     val videoFrameCount: Int = 0,

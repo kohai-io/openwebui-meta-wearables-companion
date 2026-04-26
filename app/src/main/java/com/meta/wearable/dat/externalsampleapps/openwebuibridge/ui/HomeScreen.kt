@@ -117,6 +117,11 @@ fun HomeScreen(
                 ?: Toast.makeText(context, "Activity not available", Toast.LENGTH_SHORT).show()
           },
       )
+      SwitchButton(
+          label = stringResource(R.string.use_without_glasses_button_title),
+          enabled = uiState.canRegister,
+          onClick = { viewModel.enterCompanionMode() },
+      )
     }
   }
 }

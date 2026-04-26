@@ -19,6 +19,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.LinkOff
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.StopCircle
 import androidx.compose.material.icons.filled.VideocamOff
 import androidx.compose.material3.DropdownMenu
@@ -54,8 +57,15 @@ fun ConnectionsTab(
     isCameraStreaming: Boolean,
     isCameraEnabled: Boolean,
     isBridgeRunning: Boolean,
+    isBridgeStarting: Boolean,
+    isWearablesRegistered: Boolean,
+    hasActiveDevice: Boolean,
+    hasDiscoveredDevice: Boolean,
     themeMode: AppThemeMode,
     onThemeModeChange: (AppThemeMode) -> Unit,
+    onRegisterWearables: () -> Unit,
+    onUnregisterWearables: () -> Unit,
+    onStartBridge: () -> Unit,
     onToggleCamera: () -> Unit,
     onStopBridge: () -> Unit,
     modifier: Modifier = Modifier,
@@ -196,10 +206,42 @@ fun ConnectionsTab(
     }
 
     SectionCard(title = "Glasses") {
+      Text(
+          text =
+              when {
+                !isWearablesRegistered -> stringResource(R.string.glasses_not_registered)
+                isBridgeRunning -> stringResource(R.string.glasses_connected)
+                isBridgeStarting -> stringResource(R.string.glasses_connecting)
+                hasActiveDevice -> stringResource(R.string.glasses_detected_bridge_idle)
+                hasDiscoveredDevice -> stringResource(R.string.glasses_discovered_inactive)
+                else -> stringResource(R.string.waiting_for_active_device)
+              },
+          style = MaterialTheme.typography.bodyMedium,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+      SwitchButton(
+          label =
+              if (isWearablesRegistered) {
+                stringResource(R.string.unregister_button_title)
+              } else {
+                stringResource(R.string.register_button_title)
+              },
+          onClick = if (isWearablesRegistered) onUnregisterWearables else onRegisterWearables,
+          icon = if (isWearablesRegistered) Icons.Default.LinkOff else Icons.Default.Link,
+          isDestructive = isWearablesRegistered,
+          modifier = Modifier.fillMaxWidth(),
+      )
       Row(
           modifier = Modifier.fillMaxWidth(),
           horizontalArrangement = Arrangement.spacedBy(8.dp),
       ) {
+        SwitchButton(
+            label = stringResource(R.string.start_bridge_button_title),
+            onClick = onStartBridge,
+            icon = Icons.Default.PlayArrow,
+            enabled = isWearablesRegistered && hasActiveDevice && !isBridgeRunning && !isBridgeStarting,
+            modifier = Modifier.weight(1f),
+        )
         SwitchButton(
             label = if (isCameraEnabled)
               stringResource(R.string.stop_camera_stream_button_title)
@@ -211,11 +253,17 @@ fun ConnectionsTab(
             enabled = isBridgeRunning,
             modifier = Modifier.weight(1f),
         )
+      }
+      Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(8.dp),
+      ) {
         SwitchButton(
             label = stringResource(R.string.stop_bridge_button_title),
             onClick = onStopBridge,
             icon = Icons.Default.StopCircle,
             isDestructive = true,
+            enabled = isBridgeRunning || isCameraEnabled,
             modifier = Modifier.weight(1f),
         )
       }

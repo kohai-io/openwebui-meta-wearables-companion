@@ -10,6 +10,7 @@ package com.meta.wearable.dat.externalsampleapps.openwebuibridge.ui
 
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.LocalActivity
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -42,6 +43,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -52,6 +54,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.meta.wearable.dat.camera.types.StreamSessionState
+import com.meta.wearable.dat.core.types.Permission
+import com.meta.wearable.dat.core.types.PermissionStatus
 import com.meta.wearable.dat.externalsampleapps.openwebuibridge.R
 import com.meta.wearable.dat.externalsampleapps.openwebuibridge.stream.StreamViewModel
 import com.meta.wearable.dat.externalsampleapps.openwebuibridge.wearables.WearablesViewModel
@@ -61,6 +65,7 @@ private enum class BottomTab { CHAT, CONNECTIONS }
 @Composable
 fun StreamScreen(
     wearablesViewModel: WearablesViewModel,
+    onRequestWearablesPermission: suspend (Permission) -> PermissionStatus,
     modifier: Modifier = Modifier,
     streamViewModel: StreamViewModel =
         viewModel(
@@ -74,12 +79,27 @@ fun StreamScreen(
   val streamUiState by streamViewModel.uiState.collectAsStateWithLifecycle()
   val wearablesUiState by wearablesViewModel.uiState.collectAsStateWithLifecycle()
   val clipboardManager = LocalClipboardManager.current
+  val activity = LocalActivity.current
+  val context = LocalContext.current
   val isCameraStreaming = streamUiState.streamSessionState == StreamSessionState.STREAMING
   val isCameraStarting = streamUiState.streamSessionState == StreamSessionState.STARTING
   val isCameraEnabled = streamUiState.streamSessionState != StreamSessionState.STOPPED
+  val hasDiscoveredWearablesDevice = wearablesUiState.devices.isNotEmpty()
+  val hasActiveWearablesDevice = wearablesUiState.hasActiveDevice
   var selectedTab by remember { mutableStateOf(BottomTab.CHAT) }
 
-  LaunchedEffect(Unit) { streamViewModel.startStream() }
+  LaunchedEffect(
+      wearablesUiState.isStreaming,
+      wearablesUiState.isRegistered,
+      wearablesUiState.hasActiveDevice,
+      wearablesUiState.isGettingStartedSheetVisible,
+  ) {
+    if (wearablesUiState.isStreaming && wearablesUiState.isRegistered && hasActiveWearablesDevice) {
+      streamViewModel.startStream()
+    } else if (!wearablesUiState.isStreaming) {
+      streamViewModel.stopWearablesSession()
+    }
+  }
 
   Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
     Box(modifier = Modifier.fillMaxSize()) {
@@ -98,6 +118,7 @@ fun StreamScreen(
                     onSelectChat = streamViewModel::selectOpenWebUiChat,
                     onOpenChatMenu = streamViewModel::refreshOpenWebUiChats,
                     onNewChat = streamViewModel::startNewOpenWebUiChat,
+                    isCameraAvailable = streamUiState.isBridgeRunning,
                     onSnapshotAsk = { streamViewModel.askOpenWebUiAboutSnapshot() },
                     onToggleCamera = { streamViewModel.toggleCameraStream() },
                     onQuickPrompt = { prompt ->
@@ -124,12 +145,29 @@ fun StreamScreen(
                     isCameraStreaming = isCameraStreaming,
                     isCameraEnabled = isCameraEnabled,
                     isBridgeRunning = streamUiState.isBridgeRunning,
+                    isBridgeStarting = streamUiState.isBridgeStarting,
+                    isWearablesRegistered = wearablesUiState.isRegistered,
+                    hasActiveDevice = hasActiveWearablesDevice,
+                    hasDiscoveredDevice = hasDiscoveredWearablesDevice,
                     themeMode = wearablesUiState.appThemeMode,
                     onThemeModeChange = wearablesViewModel::updateAppThemeMode,
+                    onRegisterWearables = {
+                      activity?.let { wearablesViewModel.startRegistration(it) }
+                          ?: Toast.makeText(context, "Activity not available", Toast.LENGTH_SHORT).show()
+                    },
+                    onUnregisterWearables = {
+                      activity?.let { wearablesViewModel.startUnregistration(it) }
+                          ?: Toast.makeText(context, "Activity not available", Toast.LENGTH_SHORT).show()
+                    },
+                    onStartBridge = {
+                      if (wearablesUiState.isRegistered) {
+                        wearablesViewModel.navigateToStreaming(onRequestWearablesPermission)
+                      }
+                    },
                     onToggleCamera = { streamViewModel.toggleCameraStream() },
                     onStopBridge = {
-                      streamViewModel.stopStream()
-                      wearablesViewModel.navigateToDeviceSelection()
+                      streamViewModel.stopWearablesSession()
+                      wearablesViewModel.enterCompanionMode()
                     },
                     modifier = Modifier.fillMaxSize(),
                 )
