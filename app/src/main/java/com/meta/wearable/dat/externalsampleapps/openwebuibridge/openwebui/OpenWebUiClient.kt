@@ -13,6 +13,7 @@ import android.util.Base64
 import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.URLDecoder
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
@@ -30,6 +31,25 @@ data class OpenWebUiImageOptions(
     val jpegQuality: Int,
 )
 
+data class OpenWebUiChatSummary(
+    val id: String,
+    val title: String,
+    val updatedAt: Long,
+    val createdAt: Long,
+)
+
+data class OpenWebUiChatMessage(
+    val id: String,
+    val role: String,
+    val content: String,
+)
+
+data class OpenWebUiFileData(
+    val fileName: String,
+    val contentType: String,
+    val data: ByteArray,
+)
+
 sealed interface OpenWebUiResult {
   data class Success(
       val content: String,
@@ -45,9 +65,32 @@ sealed interface OpenWebUiModelsResult {
   data class Failure(val message: String) : OpenWebUiModelsResult
 }
 
+sealed interface OpenWebUiChatsResult {
+  data class Success(val chats: List<OpenWebUiChatSummary>) : OpenWebUiChatsResult
+
+  data class Failure(val message: String) : OpenWebUiChatsResult
+}
+
+sealed interface OpenWebUiChatHistoryResult {
+  data class Success(
+      val title: String,
+      val messages: List<OpenWebUiChatMessage>,
+  ) : OpenWebUiChatHistoryResult
+
+  data class Failure(val message: String) : OpenWebUiChatHistoryResult
+}
+
+sealed interface OpenWebUiFileResult {
+  data class Success(val file: OpenWebUiFileData) : OpenWebUiFileResult
+
+  data class Failure(val message: String) : OpenWebUiFileResult
+}
+
 private data class HttpResponse(
     val code: Int,
     val body: String,
+    val headers: Map<String, List<String>> = emptyMap(),
+    val bodyBytes: ByteArray = body.toByteArray(Charsets.UTF_8),
 )
 
 private data class ChatSnapshot(
@@ -73,6 +116,91 @@ private sealed interface ChatWriteResult {
 }
 
 class OpenWebUiClient {
+  suspend fun listChats(baseUrl: String, apiKey: String): OpenWebUiChatsResult =
+      withContext(Dispatchers.IO) {
+        if (baseUrl.isBlank()) {
+          return@withContext OpenWebUiChatsResult.Failure("Open WebUI URL is required")
+        }
+        if (apiKey.isBlank()) {
+          return@withContext OpenWebUiChatsResult.Failure("Open WebUI API key is required")
+        }
+
+        try {
+          val response = request(method = "GET", url = apiV1Url(baseUrl, "/chats/"), apiKey = apiKey)
+          if (response.code !in 200..299) {
+            return@withContext OpenWebUiChatsResult.Failure(
+                "Open WebUI chats request returned HTTP ${response.code}: ${response.body.take(500)}"
+            )
+          }
+
+          OpenWebUiChatsResult.Success(parseChats(response.body))
+        } catch (error: Exception) {
+          OpenWebUiChatsResult.Failure("Open WebUI chats request failed: ${error.message}")
+        }
+      }
+
+  suspend fun getChatHistory(
+      baseUrl: String,
+      apiKey: String,
+      chatId: String,
+  ): OpenWebUiChatHistoryResult =
+      withContext(Dispatchers.IO) {
+        if (baseUrl.isBlank()) {
+          return@withContext OpenWebUiChatHistoryResult.Failure("Open WebUI URL is required")
+        }
+        if (apiKey.isBlank()) {
+          return@withContext OpenWebUiChatHistoryResult.Failure("Open WebUI API key is required")
+        }
+        if (chatId.isBlank()) {
+          return@withContext OpenWebUiChatHistoryResult.Failure("Open WebUI chat id is required")
+        }
+
+        try {
+          val snapshot = fetchChat(baseUrl, apiKey, chatId)
+          OpenWebUiChatHistoryResult.Success(
+              title = snapshot.title,
+              messages = snapshot.toChatMessages(),
+          )
+        } catch (error: MissingChatException) {
+          OpenWebUiChatHistoryResult.Failure("Open WebUI chat was not found")
+        } catch (error: Exception) {
+          OpenWebUiChatHistoryResult.Failure("Open WebUI chat history request failed: ${error.message}")
+        }
+      }
+
+  suspend fun downloadFile(
+      url: String,
+      apiKey: String,
+      fallbackName: String,
+  ): OpenWebUiFileResult =
+      withContext(Dispatchers.IO) {
+        if (url.isBlank()) {
+          return@withContext OpenWebUiFileResult.Failure("File URL is required")
+        }
+        if (apiKey.isBlank()) {
+          return@withContext OpenWebUiFileResult.Failure("Open WebUI API key is required")
+        }
+
+        try {
+          val response = request(method = "GET", url = url, apiKey = apiKey, accept = "*/*")
+          if (response.code !in 200..299) {
+            return@withContext OpenWebUiFileResult.Failure(
+                "Open WebUI file download returned HTTP ${response.code}: ${response.body.take(500)}"
+            )
+          }
+
+          OpenWebUiFileResult.Success(
+              OpenWebUiFileData(
+                  fileName = response.fileNameFromHeaders().ifBlank { fallbackName.ifBlank { "openwebui-file" } },
+                  contentType = response.contentType().ifBlank { "application/octet-stream" },
+                  data = response.bodyBytes,
+              )
+          )
+        } catch (error: Exception) {
+          OpenWebUiFileResult.Failure("Open WebUI file download failed: ${error.message}")
+        }
+      }
+
   suspend fun listModels(baseUrl: String, apiKey: String): OpenWebUiModelsResult =
       withContext(Dispatchers.IO) {
         if (baseUrl.isBlank()) {
@@ -714,6 +842,22 @@ class OpenWebUiClient {
     return branch.asReversed()
   }
 
+  private fun ChatSnapshot.toChatMessages(): List<OpenWebUiChatMessage> =
+      historyMessagesInCurrentBranch()
+          .mapNotNull { message ->
+            val role = message.optString("role")
+            val content = contentToText(message.opt("content") ?: "").trim()
+            if ((role == "user" || role == "assistant") && content.isNotBlank()) {
+              OpenWebUiChatMessage(
+                  id = message.optString("id").ifBlank { UUID.randomUUID().toString() },
+                  role = role,
+                  content = content,
+              )
+            } else {
+              null
+            }
+          }
+
   private fun appendChildId(message: JSONObject?, childId: String) {
     if (message == null) {
       return
@@ -732,7 +876,8 @@ class OpenWebUiClient {
       url: String,
       apiKey: String,
       body: String? = null,
-    ): HttpResponse = request(method, url, apiKey, body?.toByteArray(Charsets.UTF_8), "application/json")
+      accept: String = "application/json",
+    ): HttpResponse = request(method, url, apiKey, body?.toByteArray(Charsets.UTF_8), "application/json", accept)
 
     private fun request(
       method: String,
@@ -740,6 +885,7 @@ class OpenWebUiClient {
       apiKey: String,
       body: ByteArray?,
       contentType: String,
+      accept: String = "application/json",
     ): HttpResponse {
     val connection =
         (URL(url).openConnection() as HttpURLConnection).apply {
@@ -747,7 +893,7 @@ class OpenWebUiClient {
           connectTimeout = 15_000
           readTimeout = 90_000
           setRequestProperty("Authorization", "Bearer $apiKey")
-          setRequestProperty("Accept", "application/json")
+          setRequestProperty("Accept", accept)
           if (body != null) {
             doOutput = true
             setRequestProperty("Content-Type", contentType)
@@ -758,17 +904,44 @@ class OpenWebUiClient {
         connection.outputStream.use { stream -> stream.write(body) }
       }
       val responseCode = connection.responseCode
-      val responseText =
+      val responseBytes =
           if (responseCode in 200..299) {
-            connection.inputStream.bufferedReader().use { it.readText() }
+            connection.inputStream.use { it.readBytes() }
           } else {
-            connection.errorStream?.bufferedReader()?.use { it.readText() }.orEmpty()
+            connection.errorStream?.use { it.readBytes() } ?: ByteArray(0)
           }
-      return HttpResponse(code = responseCode, body = responseText)
+      val responseText =
+          if (accept == "*/*" && responseCode in 200..299) {
+            String(responseBytes, Charsets.ISO_8859_1)
+          } else {
+            String(responseBytes, Charsets.UTF_8)
+          }
+      return HttpResponse(
+          code = responseCode,
+          body = responseText,
+          headers = connection.headerFields.orEmpty(),
+          bodyBytes = responseBytes,
+      )
     } finally {
       connection.disconnect()
     }
   }
+
+  private fun HttpResponse.contentType(): String =
+      headers.firstHeader("Content-Type")?.substringBefore(";")?.trim().orEmpty()
+
+  private fun HttpResponse.fileNameFromHeaders(): String {
+    val disposition = headers.firstHeader("Content-Disposition").orEmpty()
+    val utf8Name =
+        Regex("""filename\*=UTF-8''([^;]+)""").find(disposition)?.groupValues?.getOrNull(1)
+    if (!utf8Name.isNullOrBlank()) {
+      return URLDecoder.decode(utf8Name.trim('"'), "UTF-8")
+    }
+    return Regex("""filename="?([^";]+)"?""").find(disposition)?.groupValues?.getOrNull(1).orEmpty()
+  }
+
+  private fun Map<String, List<String>>.firstHeader(name: String): String? =
+      entries.firstOrNull { it.key.equals(name, ignoreCase = true) }?.value?.firstOrNull()
 
   private fun chatCompletionsUrl(baseUrl: String): String {
     val normalized = baseUrl.trim().trimEnd('/')
@@ -871,6 +1044,37 @@ class OpenWebUiClient {
       }
     }
     return models.distinct().sorted()
+  }
+
+  private fun parseChats(responseText: String): List<OpenWebUiChatSummary> {
+    val trimmed = responseText.trim()
+    if (trimmed.isBlank()) {
+      return emptyList()
+    }
+
+    val data =
+        if (trimmed.startsWith("[")) {
+          JSONArray(trimmed)
+        } else {
+          val root = JSONObject(trimmed)
+          root.optJSONArray("chats") ?: root.optJSONArray("data") ?: JSONArray()
+        }
+    val chats = mutableListOf<OpenWebUiChatSummary>()
+    for (index in 0 until data.length()) {
+      val item = data.optJSONObject(index) ?: continue
+      val id = item.optString("id").ifBlank { item.optString("chat_id") }
+      if (id.isBlank()) {
+        continue
+      }
+      chats +=
+          OpenWebUiChatSummary(
+              id = id,
+              title = item.optString("title").ifBlank { "Untitled chat" },
+              updatedAt = item.optLong("updated_at", 0L),
+              createdAt = item.optLong("created_at", 0L),
+          )
+    }
+    return chats.sortedByDescending { it.updatedAt }
   }
 
   private fun JSONArray.toTextBlocks(): String {

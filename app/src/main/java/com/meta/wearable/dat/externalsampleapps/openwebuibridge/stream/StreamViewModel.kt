@@ -19,6 +19,7 @@ package com.meta.wearable.dat.externalsampleapps.openwebuibridge.stream
 
 import android.annotation.SuppressLint
 import android.app.Application
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
@@ -27,7 +28,9 @@ import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
+import android.os.Environment
 import android.os.Bundle
+import android.provider.MediaStore
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -52,8 +55,13 @@ import com.meta.wearable.dat.core.Wearables
 import com.meta.wearable.dat.core.selectors.DeviceSelector
 import com.meta.wearable.dat.core.session.DeviceSessionState
 import com.meta.wearable.dat.core.session.Session
+import com.meta.wearable.dat.externalsampleapps.openwebuibridge.openwebui.OpenWebUiChatHistoryResult
+import com.meta.wearable.dat.externalsampleapps.openwebuibridge.openwebui.OpenWebUiChatMessage
+import com.meta.wearable.dat.externalsampleapps.openwebuibridge.openwebui.OpenWebUiChatSummary
 import com.meta.wearable.dat.externalsampleapps.openwebuibridge.openwebui.OpenWebUiChatSession
+import com.meta.wearable.dat.externalsampleapps.openwebuibridge.openwebui.OpenWebUiChatsResult
 import com.meta.wearable.dat.externalsampleapps.openwebuibridge.openwebui.OpenWebUiClient
+import com.meta.wearable.dat.externalsampleapps.openwebuibridge.openwebui.OpenWebUiFileResult
 import com.meta.wearable.dat.externalsampleapps.openwebuibridge.openwebui.OpenWebUiImageOptions
 import com.meta.wearable.dat.externalsampleapps.openwebuibridge.openwebui.OpenWebUiModelsResult
 import com.meta.wearable.dat.externalsampleapps.openwebuibridge.openwebui.OpenWebUiResult
@@ -63,6 +71,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
 import java.util.Locale
+import java.util.UUID
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -84,6 +93,7 @@ class StreamViewModel(
     private const val KEY_OPEN_WEB_UI_MODEL = "open_web_ui_model"
     private const val KEY_OPEN_WEB_UI_CHAT_ID = "open_web_ui_chat_id"
     private const val KEY_OPEN_WEB_UI_SESSION_ID = "open_web_ui_session_id"
+    private const val KEY_OPEN_WEB_UI_CHAT_TITLE = "open_web_ui_chat_title"
     private const val KEY_AUTO_SPEAK_RESPONSE = "auto_speak_response"
     private const val KEY_SNAPSHOT_IMAGE_QUALITY = "snapshot_image_quality"
     private const val KEY_OPEN_WEB_UI_SYSTEM_PROMPT = "open_web_ui_system_prompt"
@@ -108,6 +118,7 @@ class StreamViewModel(
         openWebUiModel = settings.getString(KEY_OPEN_WEB_UI_MODEL, "").orEmpty(),
         openWebUiChatId = settings.getString(KEY_OPEN_WEB_UI_CHAT_ID, "").orEmpty(),
         openWebUiSessionId = settings.getString(KEY_OPEN_WEB_UI_SESSION_ID, "").orEmpty(),
+        openWebUiChatTitle = settings.getString(KEY_OPEN_WEB_UI_CHAT_TITLE, "").orEmpty(),
         isAutoSpeakResponseEnabled = settings.getBoolean(KEY_AUTO_SPEAK_RESPONSE, false),
         snapshotImageQuality =
           readSnapshotImageQuality(settings.getString(KEY_SNAPSHOT_IMAGE_QUALITY, null)),
@@ -142,6 +153,8 @@ class StreamViewModel(
           openWebUiBaseUrl = value,
           openWebUiChatId = "",
           openWebUiSessionId = "",
+          openWebUiChatTitle = "",
+          openWebUiChatMessages = emptyList(),
           openWebUiError = null,
       )
     }
@@ -149,6 +162,7 @@ class StreamViewModel(
         .putString(KEY_OPEN_WEB_UI_BASE_URL, value)
         .remove(KEY_OPEN_WEB_UI_CHAT_ID)
         .remove(KEY_OPEN_WEB_UI_SESSION_ID)
+        .remove(KEY_OPEN_WEB_UI_CHAT_TITLE)
         .apply()
   }
 
@@ -158,6 +172,8 @@ class StreamViewModel(
           openWebUiApiKey = value,
           openWebUiChatId = "",
           openWebUiSessionId = "",
+          openWebUiChatTitle = "",
+          openWebUiChatMessages = emptyList(),
           openWebUiError = null,
       )
     }
@@ -165,6 +181,7 @@ class StreamViewModel(
         .putString(KEY_OPEN_WEB_UI_API_KEY, value)
         .remove(KEY_OPEN_WEB_UI_CHAT_ID)
         .remove(KEY_OPEN_WEB_UI_SESSION_ID)
+        .remove(KEY_OPEN_WEB_UI_CHAT_TITLE)
         .apply()
   }
 
@@ -174,6 +191,8 @@ class StreamViewModel(
           openWebUiModel = value,
           openWebUiChatId = "",
           openWebUiSessionId = "",
+          openWebUiChatTitle = "",
+          openWebUiChatMessages = emptyList(),
           openWebUiError = null,
       )
     }
@@ -181,14 +200,50 @@ class StreamViewModel(
         .putString(KEY_OPEN_WEB_UI_MODEL, value)
         .remove(KEY_OPEN_WEB_UI_CHAT_ID)
         .remove(KEY_OPEN_WEB_UI_SESSION_ID)
+        .remove(KEY_OPEN_WEB_UI_CHAT_TITLE)
         .apply()
   }
 
   fun startNewOpenWebUiChat() {
     _uiState.update {
-      it.copy(openWebUiChatId = "", openWebUiSessionId = "", openWebUiError = null)
+      it.copy(
+          openWebUiChatId = "",
+          openWebUiSessionId = "",
+          openWebUiChatTitle = "",
+          openWebUiChatMessages = emptyList(),
+          isLoadingOpenWebUiChatHistory = false,
+          openWebUiResponse = null,
+          openWebUiError = null,
+          voiceTranscript = null,
+      )
     }
-    settings.edit().remove(KEY_OPEN_WEB_UI_CHAT_ID).remove(KEY_OPEN_WEB_UI_SESSION_ID).apply()
+    settings.edit()
+        .remove(KEY_OPEN_WEB_UI_CHAT_ID)
+        .remove(KEY_OPEN_WEB_UI_SESSION_ID)
+        .remove(KEY_OPEN_WEB_UI_CHAT_TITLE)
+        .apply()
+  }
+
+  fun selectOpenWebUiChat(chat: OpenWebUiChatSummary) {
+    val sessionId = UUID.randomUUID().toString()
+    _uiState.update {
+      it.copy(
+          openWebUiChatId = chat.id,
+          openWebUiSessionId = sessionId,
+          openWebUiChatTitle = chat.title,
+          openWebUiChatMessages = emptyList(),
+          isLoadingOpenWebUiChatHistory = true,
+          openWebUiResponse = null,
+          openWebUiError = null,
+          voiceTranscript = null,
+      )
+    }
+    settings.edit()
+        .putString(KEY_OPEN_WEB_UI_CHAT_ID, chat.id)
+        .putString(KEY_OPEN_WEB_UI_SESSION_ID, sessionId)
+        .putString(KEY_OPEN_WEB_UI_CHAT_TITLE, chat.title)
+        .apply()
+    loadSelectedOpenWebUiChatHistory(chat.id)
   }
 
   fun updateOpenWebUiPrompt(value: String) {
@@ -212,7 +267,9 @@ class StreamViewModel(
   }
 
   fun speakResponse() {
-    val response = _uiState.value.openWebUiResponse
+    val response =
+        _uiState.value.openWebUiResponse
+            ?: _uiState.value.openWebUiChatMessages.lastOrNull { it.role == "assistant" }?.content
     if (response.isNullOrBlank()) {
       _uiState.update { it.copy(openWebUiError = "No response to speak") }
       return
@@ -293,6 +350,86 @@ class StreamViewModel(
         .apply()
   }
 
+  private fun loadSelectedOpenWebUiChatHistory(chatId: String) {
+    val state = _uiState.value
+    viewModelScope.launch {
+      when (
+          val result =
+              openWebUiClient.getChatHistory(
+                  baseUrl = state.openWebUiBaseUrl,
+                  apiKey = state.openWebUiApiKey,
+                  chatId = chatId,
+              )
+      ) {
+        is OpenWebUiChatHistoryResult.Success ->
+            _uiState.update {
+              it.copy(
+                  openWebUiChatTitle = result.title.ifBlank { it.openWebUiChatTitle },
+                  openWebUiChatMessages = result.messages,
+                  isLoadingOpenWebUiChatHistory = false,
+                  openWebUiError = null,
+              )
+            }
+        is OpenWebUiChatHistoryResult.Failure ->
+            _uiState.update {
+              it.copy(
+                  isLoadingOpenWebUiChatHistory = false,
+                  openWebUiError = result.message,
+              )
+            }
+      }
+    }
+  }
+
+  private fun appendOpenWebUiExchange(prompt: String, response: String) {
+    _uiState.update {
+      it.copy(
+          openWebUiChatMessages =
+              it.openWebUiChatMessages +
+                  OpenWebUiChatMessage(
+                      id = UUID.randomUUID().toString(),
+                      role = "user",
+                      content = prompt,
+                  ) +
+                  OpenWebUiChatMessage(
+                      id = UUID.randomUUID().toString(),
+                      role = "assistant",
+                      content = response,
+                  ),
+      )
+    }
+  }
+
+  fun refreshOpenWebUiChats() {
+    if (_uiState.value.isLoadingOpenWebUiChats) {
+      return
+    }
+
+    val state = _uiState.value
+    _uiState.update { it.copy(isLoadingOpenWebUiChats = true, openWebUiError = null) }
+    viewModelScope.launch {
+      when (
+          val result =
+              openWebUiClient.listChats(
+                  baseUrl = state.openWebUiBaseUrl,
+                  apiKey = state.openWebUiApiKey,
+              )
+      ) {
+        is OpenWebUiChatsResult.Success ->
+            _uiState.update {
+              it.copy(
+                  isLoadingOpenWebUiChats = false,
+                  openWebUiChats = result.chats,
+              )
+            }
+        is OpenWebUiChatsResult.Failure ->
+            _uiState.update {
+              it.copy(isLoadingOpenWebUiChats = false, openWebUiError = result.message)
+            }
+      }
+    }
+  }
+
   fun refreshOpenWebUiModels() {
     if (_uiState.value.isLoadingOpenWebUiModels) {
       return
@@ -354,6 +491,7 @@ class StreamViewModel(
       when (result) {
         is OpenWebUiResult.Success -> {
           persistOpenWebUiChatSession(result.chatSession)
+          appendOpenWebUiExchange(state.openWebUiPrompt, result.content)
           _uiState.update { it.copy(isAskingOpenWebUi = false, openWebUiResponse = result.content) }
           maybeSpeakResponse(result.content)
         }
@@ -405,6 +543,7 @@ class StreamViewModel(
             when (openWebUiResult) {
               is OpenWebUiResult.Success -> {
                 persistOpenWebUiChatSession(openWebUiResult.chatSession)
+                appendOpenWebUiExchange(prompt, openWebUiResult.content)
                 _uiState.update {
                   it.copy(
                       isAskingOpenWebUi = false,
@@ -460,6 +599,7 @@ class StreamViewModel(
       when (result) {
         is OpenWebUiResult.Success -> {
           persistOpenWebUiChatSession(result.chatSession)
+          appendOpenWebUiExchange(prompt, result.content)
           _uiState.update { it.copy(isAskingOpenWebUi = false, openWebUiResponse = result.content) }
           maybeSpeakResponse(result.content)
         }
@@ -669,6 +809,11 @@ class StreamViewModel(
           snapshotImageQuality = it.snapshotImageQuality,
           openWebUiChatId = it.openWebUiChatId,
           openWebUiSessionId = it.openWebUiSessionId,
+          openWebUiChatTitle = it.openWebUiChatTitle,
+          openWebUiChats = it.openWebUiChats,
+          isLoadingOpenWebUiChats = it.isLoadingOpenWebUiChats,
+          openWebUiChatMessages = it.openWebUiChatMessages,
+          isLoadingOpenWebUiChatHistory = it.isLoadingOpenWebUiChatHistory,
           openWebUiModels = it.openWebUiModels,
       )
     }
@@ -737,6 +882,88 @@ class StreamViewModel(
       context.startActivity(chooser)
     } catch (e: IOException) {
       Log.e("StreamViewModel", "Failed to share photo", e)
+    }
+  }
+
+  fun downloadOpenWebUiFile(fileUrl: String, fileName: String, mimeType: String) {
+    val state = _uiState.value
+    val absoluteUrl = absoluteOpenWebUiUrl(state.openWebUiBaseUrl, fileUrl)
+    if (absoluteUrl.isBlank()) {
+      _uiState.update { it.copy(openWebUiError = "File URL is missing") }
+      return
+    }
+
+    _uiState.update { it.copy(openWebUiError = null) }
+    viewModelScope.launch {
+      when (
+          val result =
+              openWebUiClient.downloadFile(
+                  url = absoluteUrl,
+                  apiKey = state.openWebUiApiKey,
+                  fallbackName = fileName,
+              )
+      ) {
+        is OpenWebUiFileResult.Success -> {
+          runCatching {
+                saveFileToDownloads(
+                    fileName = result.file.fileName.ifBlank { fileName },
+                    mimeType = result.file.contentType.ifBlank { mimeType },
+                    data = result.file.data,
+                )
+              }
+              .onSuccess { savedName ->
+                _uiState.update { it.copy(openWebUiError = "Downloaded $savedName") }
+              }
+              .onFailure { error ->
+                _uiState.update { it.copy(openWebUiError = "Download failed: ${error.message}") }
+              }
+        }
+        is OpenWebUiFileResult.Failure ->
+            _uiState.update { it.copy(openWebUiError = result.message) }
+      }
+    }
+  }
+
+  private fun saveFileToDownloads(fileName: String, mimeType: String, data: ByteArray): String {
+    val context = getApplication<Application>()
+    val safeName = sanitizeFileName(fileName.ifBlank { "openwebui-file" })
+    val resolver = context.contentResolver
+    val values =
+        ContentValues().apply {
+          put(MediaStore.Downloads.DISPLAY_NAME, safeName)
+          put(MediaStore.Downloads.MIME_TYPE, mimeType.ifBlank { "application/octet-stream" })
+          put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+          put(MediaStore.Downloads.IS_PENDING, 1)
+        }
+    val uri =
+        resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+            ?: throw IOException("Could not create Downloads entry")
+    try {
+      resolver.openOutputStream(uri)?.use { stream -> stream.write(data) }
+          ?: throw IOException("Could not open Downloads entry")
+      values.clear()
+      values.put(MediaStore.Downloads.IS_PENDING, 0)
+      resolver.update(uri, values, null, null)
+      return safeName
+    } catch (error: Exception) {
+      resolver.delete(uri, null, null)
+      throw error
+    }
+  }
+
+  private fun sanitizeFileName(fileName: String): String =
+      fileName.replace(Regex("""[\\/:*?"<>|]"""), "_").take(120).ifBlank { "openwebui-file" }
+
+  private fun absoluteOpenWebUiUrl(baseUrl: String, fileUrl: String): String {
+    val trimmed = fileUrl.trim()
+    if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+      return trimmed
+    }
+    val root = baseUrl.trim().trimEnd('/').removeSuffix("/api/v1").removeSuffix("/api")
+    return when {
+      trimmed.startsWith("/") -> "$root$trimmed"
+      trimmed.isNotBlank() -> "$root/$trimmed"
+      else -> ""
     }
   }
 

@@ -95,6 +95,9 @@ fun StreamScreen(
                     state = streamUiState,
                     onSelectModel = streamViewModel::updateOpenWebUiModel,
                     onOpenModelMenu = streamViewModel::refreshOpenWebUiModels,
+                    onSelectChat = streamViewModel::selectOpenWebUiChat,
+                    onOpenChatMenu = streamViewModel::refreshOpenWebUiChats,
+                    onNewChat = streamViewModel::startNewOpenWebUiChat,
                     onSnapshotAsk = { streamViewModel.askOpenWebUiAboutSnapshot() },
                     onToggleCamera = { streamViewModel.toggleCameraStream() },
                     onQuickPrompt = { prompt ->
@@ -109,6 +112,7 @@ fun StreamScreen(
                     onCopyResponse = { response ->
                       clipboardManager.setText(AnnotatedString(response))
                     },
+                    onDownloadFile = streamViewModel::downloadOpenWebUiFile,
                     onSpeakResponse = { streamViewModel.speakResponse() },
                     onStopSpeakingResponse = { streamViewModel.stopSpeakingResponse() },
                     modifier = Modifier.fillMaxSize(),

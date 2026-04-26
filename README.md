@@ -32,6 +32,32 @@ API with a user prompt.
    `GITHUB_TOKEN` in your environment.
 1. Sync Gradle and run the `app` configuration.
 
+## Local environment
+
+Copy `.env.example` to `.env` for local scripts. Gradle also reads `OWUI_BASE_URL`,
+`OWUI_API_KEY`, and `OWUI_MODEL` from the process environment, `.env`, or `local.properties` and
+uses them as development defaults in the app. The Android app stores user-edited values in
+app-private preferences after you enter them in the UI.
+
+Important variables:
+
+- `OWUI_BASE_URL`: Root Open WebUI server URL, without `/api` or `/api/v1`.
+- `OWUI_API_KEY`: API key from Open WebUI Settings > Account.
+- `OWUI_MODEL`: Optional default model id for local examples or smoke tests.
+- `GITHUB_TOKEN`: GitHub token with `read:packages` for DAT SDK dependencies.
+- `ANDROID_SERIAL`: Optional target Android device/emulator.
+
+Open WebUI Swagger docs are dev-only. `${OWUI_BASE_URL}/docs` and
+`${OWUI_BASE_URL}/openapi.json` are available only when Open WebUI is running with `ENV=dev`.
+The committed snapshot at `docs/openwebui/openapi.snapshot.json` is the offline API contract for
+coding tasks.
+
+Refresh it with:
+
+```powershell
+.\scripts\refresh-openwebui-openapi.ps1
+```
+
 ### Local debug build from PowerShell
 
 From Windows PowerShell, use Android Studio's bundled JBR and Gradle wrapper:

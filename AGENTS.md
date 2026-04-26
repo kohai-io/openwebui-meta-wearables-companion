@@ -5,6 +5,23 @@
 
 ## Code style
 
+## Open WebUI integration
+
+The companion app integrates with Open WebUI through a local typed client boundary.
+
+- Live Open WebUI Swagger docs are dev-only. `${OWUI_BASE_URL}/docs` and
+  `${OWUI_BASE_URL}/openapi.json` are available only when Open WebUI is running with `ENV=dev`.
+- Use `docs/openwebui/index.md` as the curated agent-readable API map.
+- Use `docs/openwebui/openapi.snapshot.json` as the committed OpenAPI contract when live docs are
+  unavailable.
+- Refresh the snapshot with `scripts/refresh-openwebui-openapi.ps1` only when a dev Open WebUI
+  instance is available.
+- Use `OWUI_BASE_URL` for scripts and examples. Do not hard-code private Open WebUI hosts.
+- Keep API keys in `OWUI_API_KEY`, local app preferences, or other local-only storage. Do not commit
+  secrets.
+- Keep Open WebUI HTTP details inside
+  `app/src/main/java/com/meta/wearable/dat/externalsampleapps/openwebuibridge/openwebui/`.
+- UI and ViewModels should call typed client functions rather than building endpoint strings.
 
 ## Architecture
 
@@ -999,4 +1016,3 @@ Your DAT app should only depend on:
 - [CameraAccess sample](https://github.com/facebook/meta-wearables-dat-android/tree/main/samples)
 - [Full integration guide](https://wearables.developer.meta.com/docs/build-integration-android)
 - [Developer documentation](https://wearables.developer.meta.com/docs/develop/)
-

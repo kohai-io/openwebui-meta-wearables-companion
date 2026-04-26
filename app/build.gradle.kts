@@ -6,11 +6,44 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+import java.util.Properties
+
 plugins {
   alias(libs.plugins.android.application)
   alias(libs.plugins.jetbrains.kotlin.android)
   alias(libs.plugins.compose.compiler)
 }
+
+val localProperties =
+    Properties().apply {
+      val file = rootProject.file("local.properties")
+      if (file.exists()) {
+        file.inputStream().use { load(it) }
+      }
+    }
+
+val dotEnvProperties =
+    Properties().apply {
+      val file = rootProject.file(".env")
+      if (file.exists()) {
+        file.readLines()
+            .map { it.trim() }
+            .filter { it.isNotEmpty() && !it.startsWith("#") && it.contains("=") }
+            .forEach { line ->
+              val key = line.substringBefore("=").trim()
+              val value = line.substringAfter("=").trim().trim('"', '\'')
+              setProperty(key, value)
+            }
+      }
+    }
+
+fun localValue(envName: String, propertyName: String = envName.lowercase()): String =
+    System.getenv(envName)
+        ?: dotEnvProperties.getProperty(envName)
+        ?: localProperties.getProperty(propertyName)
+        ?: ""
+
+fun quotedBuildConfig(value: String): String = "\"${value.replace("\\", "\\\\").replace("\"", "\\\"")}\""
 
 android {
   namespace = "com.meta.wearable.dat.externalsampleapps.openwebuibridge"
@@ -27,6 +60,9 @@ android {
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     vectorDrawables { useSupportLibrary = true }
+    buildConfigField("String", "OWUI_BASE_URL", quotedBuildConfig(localValue("OWUI_BASE_URL")))
+    buildConfigField("String", "OWUI_API_KEY", quotedBuildConfig(localValue("OWUI_API_KEY")))
+    buildConfigField("String", "OWUI_MODEL", quotedBuildConfig(localValue("OWUI_MODEL")))
     // Meta Wearables Device Access Toolkit Setup
     // Without Developer Mode, these values need to be set with credentials from the app registered
     // in Wearables Developer Center

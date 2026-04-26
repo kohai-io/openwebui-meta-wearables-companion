@@ -8,11 +8,15 @@
 
 package com.meta.wearable.dat.externalsampleapps.openwebuibridge.ui
 
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.util.Base64
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -31,12 +35,19 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material.icons.filled.VideocamOff
@@ -44,10 +55,12 @@ import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -55,26 +68,38 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.meta.wearable.dat.camera.types.StreamSessionState
 import com.meta.wearable.dat.externalsampleapps.openwebuibridge.R
+import com.meta.wearable.dat.externalsampleapps.openwebuibridge.openwebui.OpenWebUiChatMessage
+import com.meta.wearable.dat.externalsampleapps.openwebuibridge.openwebui.OpenWebUiChatSummary
 import com.meta.wearable.dat.externalsampleapps.openwebuibridge.stream.StreamUiState
+import java.net.HttpURLConnection
+import java.net.URL
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @Composable
 fun ChatTab(
     state: StreamUiState,
     onSelectModel: (String) -> Unit,
     onOpenModelMenu: () -> Unit,
+    onSelectChat: (OpenWebUiChatSummary) -> Unit,
+    onOpenChatMenu: () -> Unit,
+    onNewChat: () -> Unit,
     onSnapshotAsk: () -> Unit,
     onToggleCamera: () -> Unit,
     onQuickPrompt: (String) -> Unit,
     onMicTap: () -> Unit,
     onStopListening: () -> Unit,
     onCopyResponse: (String) -> Unit,
+    onDownloadFile: (String, String, String) -> Unit,
     onSpeakResponse: () -> Unit,
     onStopSpeakingResponse: () -> Unit,
     modifier: Modifier = Modifier,
@@ -101,6 +126,12 @@ fun ChatTab(
           modifier = Modifier.weight(1f),
       )
     }
+    ChatPickerRow(
+        state = state,
+        onSelectChat = onSelectChat,
+        onOpenChatMenu = onOpenChatMenu,
+        onNewChat = onNewChat,
+    )
 
     Column(
         modifier = Modifier
@@ -112,6 +143,7 @@ fun ChatTab(
       ChatMessages(
           state = state,
           onCopyResponse = onCopyResponse,
+          onDownloadFile = onDownloadFile,
           onSpeakResponse = onSpeakResponse,
           onStopSpeakingResponse = onStopSpeakingResponse,
       )
@@ -128,6 +160,108 @@ fun ChatTab(
     )
   }
 }
+
+@Composable
+private fun ChatPickerRow(
+    state: StreamUiState,
+    onSelectChat: (OpenWebUiChatSummary) -> Unit,
+    onOpenChatMenu: () -> Unit,
+    onNewChat: () -> Unit,
+) {
+  var menuExpanded by remember { mutableStateOf(false) }
+  Row(
+      modifier = Modifier.fillMaxWidth(),
+      horizontalArrangement = Arrangement.spacedBy(8.dp),
+      verticalAlignment = Alignment.CenterVertically,
+  ) {
+    Surface(
+        modifier = Modifier.weight(1f),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+    ) {
+      Box {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable {
+                  menuExpanded = true
+                  onOpenChatMenu()
+                }
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+          Icon(
+              imageVector = Icons.Default.History,
+              contentDescription = null,
+              tint = MaterialTheme.colorScheme.onSurfaceVariant,
+              modifier = Modifier.size(18.dp),
+          )
+          Text(
+              text = currentChatTitle(state),
+              style = MaterialTheme.typography.labelLarge,
+              fontWeight = FontWeight.SemiBold,
+              maxLines = 1,
+              modifier = Modifier.weight(1f),
+          )
+          Icon(
+              imageVector = Icons.Default.ExpandMore,
+              contentDescription = null,
+              tint = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+        }
+        DropdownMenu(
+            expanded = menuExpanded,
+            onDismissRequest = { menuExpanded = false },
+        ) {
+          when {
+            state.isLoadingOpenWebUiChats -> {
+              DropdownMenuItem(
+                  text = { Text(stringResource(R.string.openwebui_loading_chats)) },
+                  onClick = {},
+                  enabled = false,
+              )
+            }
+            state.openWebUiChats.isEmpty() -> {
+              DropdownMenuItem(
+                  text = { Text(stringResource(R.string.openwebui_no_chats_available)) },
+                  onClick = {},
+                  enabled = false,
+              )
+            }
+            else -> {
+              state.openWebUiChats.forEach { chat ->
+                DropdownMenuItem(
+                    text = { Text(chat.title, maxLines = 1) },
+                    onClick = {
+                      onSelectChat(chat)
+                      menuExpanded = false
+                    },
+                )
+              }
+            }
+          }
+        }
+      }
+    }
+    CompactActionChip(
+        label = stringResource(R.string.openwebui_new_chat_short),
+        icon = Icons.Default.Add,
+        enabled = true,
+        onClick = onNewChat,
+        modifier = Modifier.widthIn(min = 88.dp, max = 112.dp),
+    )
+  }
+}
+
+@Composable
+private fun currentChatTitle(state: StreamUiState): String =
+    when {
+      state.openWebUiChatTitle.isNotBlank() -> state.openWebUiChatTitle
+      state.openWebUiChatId.isNotBlank() -> stringResource(R.string.openwebui_chat_id, state.openWebUiChatId.take(8))
+      else -> stringResource(R.string.openwebui_new_chat_selected)
+    }
 
 @Composable
 private fun ConnectionStatusPill(isConnected: Boolean) {
@@ -343,36 +477,112 @@ fun BrandAvatar(size: androidx.compose.ui.unit.Dp) {
 private fun ChatMessages(
     state: StreamUiState,
     onCopyResponse: (String) -> Unit,
+    onDownloadFile: (String, String, String) -> Unit,
     onSpeakResponse: () -> Unit,
     onStopSpeakingResponse: () -> Unit,
 ) {
   val hasConversation =
-      state.openWebUiResponse != null ||
+      state.openWebUiChatMessages.isNotEmpty() ||
+          state.openWebUiResponse != null ||
           state.openWebUiError != null ||
           state.isAskingOpenWebUi ||
-          state.voiceTranscript != null
+          state.voiceTranscript != null ||
+          state.isLoadingOpenWebUiChatHistory
 
   if (!hasConversation) {
     EmptyConversation()
     return
   }
 
-  val userText = state.voiceTranscript ?: state.openWebUiPrompt
-  if (userText.isNotBlank()) {
-    UserBubble(text = userText)
+  if (state.isLoadingOpenWebUiChatHistory) {
+    LoadingHistory()
+  }
+
+  val lastAssistantMessage = state.openWebUiChatMessages.lastOrNull { it.role == "assistant" }
+  state.openWebUiChatMessages.forEach { message ->
+    ChatHistoryBubble(
+        message = message,
+        baseUrl = state.openWebUiBaseUrl,
+        apiKey = state.openWebUiApiKey,
+        isLastAssistant = message.id == lastAssistantMessage?.id,
+        isSpeaking = state.isSpeakingResponse,
+        onCopyResponse = onCopyResponse,
+        onDownloadFile = onDownloadFile,
+        onSpeakResponse = onSpeakResponse,
+        onStopSpeakingResponse = onStopSpeakingResponse,
+    )
   }
 
   when {
-    state.isAskingOpenWebUi -> AssistantBubble(text = "Thinking...")
+    state.isAskingOpenWebUi -> {
+      val userText = state.voiceTranscript ?: state.openWebUiPrompt
+      if (userText.isNotBlank()) {
+        UserBubble(
+            text = userText,
+            baseUrl = state.openWebUiBaseUrl,
+            apiKey = state.openWebUiApiKey,
+            onDownloadFile = onDownloadFile,
+        )
+      }
+      AssistantBubble(text = stringResource(R.string.openwebui_thinking))
+    }
     state.openWebUiError != null -> ErrorBubble(text = state.openWebUiError)
-    state.openWebUiResponse != null ->
+    state.openWebUiChatMessages.isEmpty() && state.openWebUiResponse != null ->
         AssistantBubble(
             text = state.openWebUiResponse,
+            baseUrl = state.openWebUiBaseUrl,
+            apiKey = state.openWebUiApiKey,
             isSpeaking = state.isSpeakingResponse,
             onCopyResponse = { onCopyResponse(state.openWebUiResponse) },
+            onDownloadFile = onDownloadFile,
             onSpeakResponse = onSpeakResponse,
             onStopSpeakingResponse = onStopSpeakingResponse,
         )
+  }
+}
+
+@Composable
+private fun ChatHistoryBubble(
+    message: OpenWebUiChatMessage,
+    baseUrl: String,
+    apiKey: String,
+    isLastAssistant: Boolean,
+    isSpeaking: Boolean,
+    onCopyResponse: (String) -> Unit,
+    onDownloadFile: (String, String, String) -> Unit,
+    onSpeakResponse: () -> Unit,
+    onStopSpeakingResponse: () -> Unit,
+) {
+  when (message.role) {
+    "user" ->
+        UserBubble(
+            text = message.content,
+            baseUrl = baseUrl,
+            apiKey = apiKey,
+            onDownloadFile = onDownloadFile,
+        )
+    "assistant" ->
+        AssistantBubble(
+            text = message.content,
+            baseUrl = baseUrl,
+            apiKey = apiKey,
+            isSpeaking = isSpeaking && isLastAssistant,
+            onCopyResponse = { onCopyResponse(message.content) },
+            onDownloadFile = onDownloadFile,
+            onSpeakResponse = if (isLastAssistant) onSpeakResponse else null,
+            onStopSpeakingResponse = if (isLastAssistant) onStopSpeakingResponse else null,
+        )
+  }
+}
+
+@Composable
+private fun LoadingHistory() {
+  Row(
+      modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+      horizontalArrangement = Arrangement.Center,
+      verticalAlignment = Alignment.CenterVertically,
+  ) {
+    CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
   }
 }
 
@@ -398,7 +608,12 @@ private fun EmptyConversation() {
 }
 
 @Composable
-private fun UserBubble(text: String) {
+private fun UserBubble(
+    text: String,
+    baseUrl: String = "",
+    apiKey: String = "",
+    onDownloadFile: ((String, String, String) -> Unit)? = null,
+) {
   Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -412,11 +627,12 @@ private fun UserBubble(text: String) {
               1.dp, AppColor.BrandPurple.copy(alpha = 0.35f)
           ),
       ) {
-        Text(
+        MarkdownMessageContent(
             text = text,
+            baseUrl = baseUrl,
+            apiKey = apiKey,
+            onDownloadFile = onDownloadFile,
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface,
         )
       }
       Icon(
@@ -432,8 +648,11 @@ private fun UserBubble(text: String) {
 @Composable
 private fun AssistantBubble(
     text: String,
+    baseUrl: String = "",
+    apiKey: String = "",
     isSpeaking: Boolean = false,
     onCopyResponse: (() -> Unit)? = null,
+    onDownloadFile: ((String, String, String) -> Unit)? = null,
     onSpeakResponse: (() -> Unit)? = null,
     onStopSpeakingResponse: (() -> Unit)? = null,
 ) {
@@ -455,15 +674,16 @@ private fun AssistantBubble(
           shape = RoundedCornerShape(20.dp, 20.dp, 20.dp, 4.dp),
           color = MaterialTheme.colorScheme.surfaceVariant,
       ) {
-        Text(
+        MarkdownMessageContent(
             text = text,
+            baseUrl = baseUrl,
+            apiKey = apiKey,
+            onDownloadFile = onDownloadFile,
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface,
         )
       }
     }
-    if (onCopyResponse != null && onSpeakResponse != null && onStopSpeakingResponse != null) {
+    if (onCopyResponse != null) {
       ResponseActionRow(
           isSpeaking = isSpeaking,
           onCopyResponse = onCopyResponse,
@@ -478,8 +698,8 @@ private fun AssistantBubble(
 private fun ResponseActionRow(
     isSpeaking: Boolean,
     onCopyResponse: () -> Unit,
-    onSpeakResponse: () -> Unit,
-    onStopSpeakingResponse: () -> Unit,
+    onSpeakResponse: (() -> Unit)?,
+    onStopSpeakingResponse: (() -> Unit)?,
 ) {
   Row(
       modifier = Modifier.fillMaxWidth(),
@@ -492,15 +712,224 @@ private fun ResponseActionRow(
         onClick = onCopyResponse,
         modifier = Modifier.weight(1f),
     )
-    CompactActionChip(
-        label = stringResource(if (isSpeaking) R.string.stop_speaking_response else R.string.speak_response),
-        icon = if (isSpeaking) Icons.Default.Stop else Icons.Default.VolumeUp,
-        enabled = true,
-        onClick = if (isSpeaking) onStopSpeakingResponse else onSpeakResponse,
-        modifier = Modifier.weight(1f),
-    )
+    if (onSpeakResponse != null && onStopSpeakingResponse != null) {
+      CompactActionChip(
+          label = stringResource(if (isSpeaking) R.string.stop_speaking_response else R.string.speak_response),
+          icon = if (isSpeaking) Icons.Default.Stop else Icons.Default.VolumeUp,
+          enabled = true,
+          onClick = if (isSpeaking) onStopSpeakingResponse else onSpeakResponse,
+          modifier = Modifier.weight(1f),
+      )
+    }
   }
 }
+
+private enum class MarkdownFileType { IMAGE, VIDEO, AUDIO, FILE }
+
+private sealed interface MarkdownPart {
+  data class Text(val value: String) : MarkdownPart
+
+  data class File(
+      val label: String,
+      val url: String,
+      val type: MarkdownFileType,
+      val mimeType: String,
+  ) : MarkdownPart
+}
+
+@Composable
+private fun MarkdownMessageContent(
+    text: String,
+    baseUrl: String,
+    apiKey: String,
+    onDownloadFile: ((String, String, String) -> Unit)?,
+    modifier: Modifier = Modifier,
+) {
+  val parts = remember(text) { parseMarkdownParts(text) }
+  Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    parts.forEach { part ->
+      when (part) {
+        is MarkdownPart.Text ->
+            if (part.value.isNotBlank()) {
+              Text(
+                  text = part.value.trim(),
+                  style = MaterialTheme.typography.bodyMedium,
+                  color = MaterialTheme.colorScheme.onSurface,
+              )
+            }
+        is MarkdownPart.File ->
+            MarkdownFileAttachment(
+                file = part,
+                absoluteUrl = absoluteUrl(baseUrl, part.url),
+                apiKey = apiKey,
+                onDownloadFile = onDownloadFile,
+            )
+      }
+    }
+  }
+}
+
+@Composable
+private fun MarkdownFileAttachment(
+    file: MarkdownPart.File,
+    absoluteUrl: String,
+    apiKey: String,
+    onDownloadFile: ((String, String, String) -> Unit)?,
+) {
+  Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    if (file.type == MarkdownFileType.IMAGE) {
+      val bitmap by produceState<Bitmap?>(initialValue = null, absoluteUrl, apiKey) {
+        value = loadBitmap(absoluteUrl, apiKey)
+      }
+      if (bitmap != null) {
+        Image(
+            bitmap = bitmap!!.asImageBitmap(),
+            contentDescription = file.label,
+            modifier = Modifier.fillMaxWidth().height(180.dp),
+            contentScale = ContentScale.Crop,
+        )
+      }
+    }
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+    ) {
+      Row(
+          modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp),
+          horizontalArrangement = Arrangement.spacedBy(8.dp),
+          verticalAlignment = Alignment.CenterVertically,
+      ) {
+        Icon(
+            imageVector =
+                when (file.type) {
+                  MarkdownFileType.IMAGE -> Icons.Default.Image
+                  MarkdownFileType.VIDEO -> Icons.Default.Movie
+                  MarkdownFileType.AUDIO -> Icons.Default.MusicNote
+                  MarkdownFileType.FILE -> Icons.Default.InsertDriveFile
+                },
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(18.dp),
+        )
+        Text(
+            text = file.label,
+            style = MaterialTheme.typography.labelMedium,
+            maxLines = 1,
+            modifier = Modifier.weight(1f),
+        )
+        Icon(
+            imageVector = Icons.Default.Download,
+            contentDescription = stringResource(R.string.download_file),
+            tint = MaterialTheme.colorScheme.primary,
+            modifier =
+                Modifier
+                    .size(22.dp)
+                    .clickable(enabled = onDownloadFile != null) {
+                      onDownloadFile?.invoke(absoluteUrl, file.label, file.mimeType)
+                    },
+        )
+      }
+    }
+  }
+}
+
+private fun parseMarkdownParts(text: String): List<MarkdownPart> {
+  val regex = Regex("""(!?)\[([^\]]*)]\(([^)\s]+)(?:\s+"[^"]*")?\)""")
+  val parts = mutableListOf<MarkdownPart>()
+  var cursor = 0
+  regex.findAll(text).forEach { match ->
+    if (match.range.first > cursor) {
+      parts += MarkdownPart.Text(text.substring(cursor, match.range.first))
+    }
+    val label = match.groupValues[2].ifBlank { fileNameFromUrl(match.groupValues[3]) }
+    val url = match.groupValues[3]
+    val fileName = label.ifBlank { fileNameFromUrl(url) }
+    val type = markdownFileType(fileName, url, match.groupValues[1] == "!")
+    parts += MarkdownPart.File(
+        label = fileName.ifBlank { type.name.lowercase() },
+        url = url,
+        type = type,
+        mimeType = mimeTypeFor(type, fileName, url),
+    )
+    cursor = match.range.last + 1
+  }
+  if (cursor < text.length) {
+    parts += MarkdownPart.Text(text.substring(cursor))
+  }
+  return parts.ifEmpty { listOf(MarkdownPart.Text(text)) }
+}
+
+private fun markdownFileType(label: String, url: String, isImageSyntax: Boolean): MarkdownFileType {
+  val source = "$label $url".lowercase()
+  return when {
+    isImageSyntax || source.endsWith(".png") || source.endsWith(".jpg") || source.endsWith(".jpeg") ||
+        source.endsWith(".gif") || source.endsWith(".webp") -> MarkdownFileType.IMAGE
+    source.endsWith(".mp4") || source.endsWith(".mov") || source.endsWith(".webm") ||
+        source.endsWith(".mkv") -> MarkdownFileType.VIDEO
+    source.endsWith(".mp3") || source.endsWith(".wav") || source.endsWith(".m4a") ||
+        source.endsWith(".ogg") || source.endsWith(".flac") -> MarkdownFileType.AUDIO
+    else -> MarkdownFileType.FILE
+  }
+}
+
+private fun mimeTypeFor(type: MarkdownFileType, label: String, url: String): String {
+  val source = "$label $url".lowercase()
+  return when {
+    source.contains(".png") -> "image/png"
+    source.contains(".gif") -> "image/gif"
+    source.contains(".webp") -> "image/webp"
+    source.contains(".jpg") || source.contains(".jpeg") -> "image/jpeg"
+    source.contains(".mp4") -> "video/mp4"
+    source.contains(".mov") -> "video/quicktime"
+    source.contains(".webm") -> "video/webm"
+    source.contains(".mp3") -> "audio/mpeg"
+    source.contains(".wav") -> "audio/wav"
+    source.contains(".m4a") -> "audio/mp4"
+    type == MarkdownFileType.IMAGE -> "image/*"
+    type == MarkdownFileType.VIDEO -> "video/*"
+    type == MarkdownFileType.AUDIO -> "audio/*"
+    else -> "application/octet-stream"
+  }
+}
+
+private fun fileNameFromUrl(url: String): String =
+    url.substringBefore("?").substringAfterLast("/").ifBlank { "file" }
+
+private fun absoluteUrl(baseUrl: String, url: String): String {
+  val trimmed = url.trim()
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://") || trimmed.startsWith("data:")) {
+    return trimmed
+  }
+  val root = baseUrl.trim().trimEnd('/').removeSuffix("/api/v1").removeSuffix("/api")
+  return if (trimmed.startsWith("/")) "$root$trimmed" else "$root/$trimmed"
+}
+
+private suspend fun loadBitmap(url: String, apiKey: String): Bitmap? =
+    withContext(Dispatchers.IO) {
+      runCatching {
+            if (url.startsWith("data:image")) {
+              val encoded = url.substringAfter("base64,", "")
+              val bytes = Base64.decode(encoded, Base64.DEFAULT)
+              BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            } else {
+              val connection =
+                  (URL(url).openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 15_000
+                    readTimeout = 30_000
+                    if (apiKey.isNotBlank()) {
+                      setRequestProperty("Authorization", "Bearer $apiKey")
+                    }
+                  }
+              try {
+                connection.inputStream.use { BitmapFactory.decodeStream(it) }
+              } finally {
+                connection.disconnect()
+              }
+            }
+          }
+          .getOrNull()
+    }
 
 @Composable
 private fun ErrorBubble(text: String) {

@@ -1,0 +1,18 @@
+---
+description: Open WebUI API context for the companion app
+alwaysApply: true
+---
+
+# Open WebUI Integration
+
+- Treat Open WebUI Swagger as dev-only. `${OWUI_BASE_URL}/docs` and `${OWUI_BASE_URL}/openapi.json`
+  exist only when Open WebUI is running with `ENV=dev`.
+- Use `docs/openwebui/index.md` for the curated mental map.
+- Use `docs/openwebui/openapi.snapshot.json` for the committed OpenAPI contract.
+- Use `OWUI_BASE_URL` for tooling and examples. Do not hard-code private Open WebUI hosts.
+- Keep API keys in `OWUI_API_KEY`, local app preferences, or other local-only storage. Do not commit
+  secrets.
+- Keep HTTP details inside the `openwebui` package, especially `OpenWebUiClient.kt`.
+- ViewModels and UI should call typed client functions instead of constructing endpoint strings.
+- When adding or changing an endpoint, update `docs/openwebui/index.md` and refresh the snapshot
+  with `scripts/refresh-openwebui-openapi.ps1` if a dev Open WebUI instance is available.

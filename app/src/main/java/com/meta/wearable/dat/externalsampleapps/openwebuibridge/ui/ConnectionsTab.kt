@@ -41,6 +41,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.meta.wearable.dat.externalsampleapps.openwebuibridge.R
+import com.meta.wearable.dat.externalsampleapps.openwebuibridge.openwebui.OpenWebUiChatSummary
 import com.meta.wearable.dat.externalsampleapps.openwebuibridge.stream.SnapshotImageQuality
 import com.meta.wearable.dat.externalsampleapps.openwebuibridge.stream.StreamUiState
 import com.meta.wearable.dat.externalsampleapps.openwebuibridge.stream.StreamViewModel
@@ -130,6 +131,67 @@ fun ConnectionsTab(
             }
           }
         }
+      }
+    }
+
+    SectionCard(title = stringResource(R.string.openwebui_chats_section)) {
+      var chatMenuExpanded by remember { mutableStateOf(false) }
+      Text(
+          text = selectedChatLabel(state),
+          style = MaterialTheme.typography.bodyMedium,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+      Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(8.dp),
+      ) {
+        TextButton(
+            onClick = { streamViewModel.refreshOpenWebUiChats() },
+            enabled = !state.isLoadingOpenWebUiChats,
+            modifier = Modifier.weight(1f),
+        ) {
+          Text(
+              if (state.isLoadingOpenWebUiChats) stringResource(R.string.openwebui_loading_chats)
+              else stringResource(R.string.openwebui_load_chats)
+          )
+        }
+        Box(modifier = Modifier.weight(1f)) {
+          TextButton(
+              onClick = { chatMenuExpanded = true },
+              enabled = state.openWebUiChats.isNotEmpty(),
+              modifier = Modifier.fillMaxWidth(),
+          ) {
+            Text(stringResource(R.string.openwebui_select_chat))
+          }
+          DropdownMenu(
+              expanded = chatMenuExpanded,
+              onDismissRequest = { chatMenuExpanded = false },
+          ) {
+            if (state.openWebUiChats.isEmpty()) {
+              DropdownMenuItem(
+                  text = { Text(stringResource(R.string.openwebui_no_chats_available)) },
+                  onClick = {},
+                  enabled = false,
+              )
+            } else {
+              state.openWebUiChats.forEach { chat ->
+                DropdownMenuItem(
+                    text = { ChatMenuItem(chat) },
+                    onClick = {
+                      streamViewModel.selectOpenWebUiChat(chat)
+                      chatMenuExpanded = false
+                    },
+                )
+              }
+            }
+          }
+        }
+      }
+      TextButton(
+          onClick = { streamViewModel.startNewOpenWebUiChat() },
+          modifier = Modifier.fillMaxWidth(),
+      ) {
+        Text(stringResource(R.string.openwebui_new_chat))
       }
     }
 
@@ -231,12 +293,6 @@ fun ConnectionsTab(
           )
         }
       }
-      TextButton(
-          onClick = { streamViewModel.startNewOpenWebUiChat() },
-          modifier = Modifier.fillMaxWidth(),
-      ) {
-        Text(stringResource(R.string.openwebui_new_chat))
-      }
     }
 
     SectionCard(title = "System prompt") {
@@ -248,6 +304,34 @@ fun ConnectionsTab(
           modifier = Modifier.fillMaxWidth(),
       )
     }
+  }
+}
+
+@Composable
+private fun selectedChatLabel(state: StreamUiState): String =
+    when {
+      state.openWebUiChatTitle.isNotBlank() ->
+          stringResource(R.string.openwebui_selected_chat, state.openWebUiChatTitle)
+      state.openWebUiChatId.isNotBlank() ->
+          stringResource(R.string.openwebui_selected_chat, state.openWebUiChatId.take(8))
+      else -> stringResource(R.string.openwebui_new_chat_selected)
+    }
+
+@Composable
+private fun ChatMenuItem(chat: OpenWebUiChatSummary) {
+  Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    Text(
+        text = chat.title,
+        style = MaterialTheme.typography.bodyMedium,
+        fontWeight = FontWeight.SemiBold,
+        maxLines = 1,
+    )
+    Text(
+        text = chat.id.take(8),
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 1,
+    )
   }
 }
 

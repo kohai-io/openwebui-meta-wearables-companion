@@ -14,6 +14,9 @@ package com.meta.wearable.dat.externalsampleapps.openwebuibridge.stream
 
 import android.graphics.Bitmap
 import com.meta.wearable.dat.camera.types.StreamSessionState
+import com.meta.wearable.dat.externalsampleapps.openwebuibridge.BuildConfig
+import com.meta.wearable.dat.externalsampleapps.openwebuibridge.openwebui.OpenWebUiChatMessage
+import com.meta.wearable.dat.externalsampleapps.openwebuibridge.openwebui.OpenWebUiChatSummary
 
 enum class SnapshotImageQuality(
     val maxDimension: Int,
@@ -32,11 +35,16 @@ data class StreamUiState(
     val capturedPhoto: Bitmap? = null,
     val isShareDialogVisible: Boolean = false,
     val isCapturing: Boolean = false,
-    val openWebUiBaseUrl: String = "",
-    val openWebUiApiKey: String = "",
-    val openWebUiModel: String = "",
+    val openWebUiBaseUrl: String = BuildConfig.OWUI_BASE_URL,
+    val openWebUiApiKey: String = BuildConfig.OWUI_API_KEY,
+    val openWebUiModel: String = BuildConfig.OWUI_MODEL,
     val openWebUiChatId: String = "",
     val openWebUiSessionId: String = "",
+    val openWebUiChatTitle: String = "",
+    val openWebUiChats: List<OpenWebUiChatSummary> = emptyList(),
+    val isLoadingOpenWebUiChats: Boolean = false,
+    val openWebUiChatMessages: List<OpenWebUiChatMessage> = emptyList(),
+    val isLoadingOpenWebUiChatHistory: Boolean = false,
     val openWebUiModels: List<String> = emptyList(),
     val isLoadingOpenWebUiModels: Boolean = false,
     val isAutoSpeakResponseEnabled: Boolean = false,
