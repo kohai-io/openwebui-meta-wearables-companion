@@ -13,7 +13,32 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
 import com.meta.wearable.dat.externalsampleapps.openwebuibridge.wearables.AppThemeMode
+
+private val CompanionDarkColors =
+    darkColorScheme(
+        primary = AppColor.BrandPurple,
+        onPrimary = Color.White,
+        primaryContainer = Color(0xFF2A1F66),
+        onPrimaryContainer = AppColor.BrandPurpleSoft,
+        secondary = AppColor.BrandBlue,
+        onSecondary = Color.White,
+        background = AppColor.BackgroundDark,
+        onBackground = Color.White,
+        surface = AppColor.SurfaceDark,
+        onSurface = Color.White,
+        surfaceVariant = AppColor.SurfaceDarkVariant,
+        onSurfaceVariant = AppColor.OnSurfaceMuted,
+        outline = AppColor.OutlineDark,
+        outlineVariant = AppColor.OutlineDark,
+    )
+
+private val CompanionLightColors =
+    lightColorScheme(
+        primary = AppColor.BrandPurple,
+        secondary = AppColor.BrandBlue,
+    )
 
 @Composable
 fun OpenWebUIBridgeTheme(
@@ -28,12 +53,7 @@ fun OpenWebUIBridgeTheme(
       }
 
   MaterialTheme(
-      colorScheme =
-          if (useDarkTheme) {
-            darkColorScheme()
-          } else {
-            lightColorScheme()
-          },
+      colorScheme = if (useDarkTheme) CompanionDarkColors else CompanionLightColors,
       content = content,
   )
 }

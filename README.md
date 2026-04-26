@@ -27,10 +27,31 @@ API with a user prompt.
 
 ## Building
 
-1. Open `samples/OpenWebUIBridge` in Android Studio.
-1. Add `github_token=<your token>` to `samples/OpenWebUIBridge/local.properties`, or set
+1. Open this repository in Android Studio.
+1. Add `github_token=<your token>` to `local.properties` at the repository root, or set
    `GITHUB_TOKEN` in your environment.
 1. Sync Gradle and run the `app` configuration.
+
+### Local debug build from PowerShell
+
+From Windows PowerShell, use Android Studio's bundled JBR and Gradle wrapper:
+
+```powershell
+Push-Location "<path-to-repo>\openwebui-meta-wearables-companion"; $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"; $env:Path = "$env:JAVA_HOME\bin;$env:Path"; .\gradlew.bat assembleDebug; Pop-Location
+```
+
+On macOS or Linux (bash/zsh), using the JBR bundled with Android Studio:
+
+```bash
+# macOS default Android Studio install
+export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+# Linux default Android Studio install
+# export JAVA_HOME="$HOME/android-studio/jbr"
+export PATH="$JAVA_HOME/bin:$PATH"
+(cd <path-to-repo>/openwebui-meta-wearables-companion && ./gradlew assembleDebug)
+```
+
+The debug APK is created under `app/build/outputs/apk/debug/`.
 
 ## Running
 
@@ -51,6 +72,28 @@ API with a user prompt.
 The app allows cleartext HTTP because local Open WebUI development commonly uses `http://` LAN or
 emulator URLs. Use HTTPS and stricter network security settings for a production app.
 
+### Install on an Android phone in developer mode
+
+1. On the phone, enable **Developer options** and **USB debugging**.
+1. Connect the phone by USB and accept the debugging prompt on the device.
+1. Install the debug build with:
+
+```powershell
+Push-Location "<path-to-repo>\openwebui-meta-wearables-companion"; $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"; $env:Path = "$env:JAVA_HOME\bin;$env:Path"; .\gradlew.bat installDebug; Pop-Location
+```
+
+Or on macOS / Linux:
+
+```bash
+export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home" # macOS
+# export JAVA_HOME="$HOME/android-studio/jbr" # Linux
+export PATH="$JAVA_HOME/bin:$PATH"
+(cd <path-to-repo>/openwebui-meta-wearables-companion && ./gradlew installDebug)
+```
+
+If multiple Android devices or emulators are connected, select a target from Android Studio or set
+`ANDROID_SERIAL` before running `installDebug`.
+
 ## Notes
 
 - The sample stores the Open WebUI endpoint, API key, selected model, system prompt, and prompt in
@@ -68,6 +111,34 @@ emulator URLs. Use HTTPS and stricter network security settings for a production
   API.
 - This app is a bridge sample; it does not intercept the built-in Meta AI assistant experience on
   the glasses.
+
+## Resource asset map
+
+- `app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml`: Adaptive launcher icon definition used on
+  Android 8.0+ devices. This is the resource Android 12+ also uses for the default system splash
+  icon because the app does not define a separate `windowSplashScreenAnimatedIcon`.
+- `app/src/main/res/drawable/ic_launcher_background.xml`: Background layer for the adaptive launcher
+  icon.
+- `app/src/main/res/drawable/ic_launcher_art_foreground.xml`: Current foreground wrapper for the
+  adaptive launcher icon. It insets the actual artwork so the launcher and Android 12+ splash mask
+  do not crop it too aggressively.
+- `app/src/main/res/mipmap-xxxhdpi/ic_launcher_art.jpg`: Duplicated launcher artwork used by the
+  adaptive icon foreground wrapper.
+- `app/src/main/res/drawable/ic_launcher_foreground.png`: Older launcher foreground artwork. It is
+  currently not referenced by `ic_launcher.xml`.
+- `app/src/main/res/mipmap-xxxhdpi/ic_launcher.jpg`: Legacy bitmap launcher icon fallback for
+  non-adaptive icon resolution paths. Updating this affects older launcher/icon fallbacks, but it
+  does not control the Android 12+ splash icon on current devices.
+- `app/src/main/res/drawable/camera_access_icon.xml`: Hero icon shown on `HomeScreen` and
+  `NonStreamScreen`.
+- `app/src/main/res/drawable/hourglass_icon.xml`: Waiting-state icon shown while the app is waiting
+  for an active device in `NonStreamScreen`.
+- `app/src/main/res/drawable/video_icon.xml`, `tap_icon.xml`, `smart_glasses_icon.xml`: Tip icons
+  shown in `NonStreamScreen`.
+- `app/src/main/res/drawable/smart_glasses_icon.xml`, `sound_icon.xml`, `walking_icon.xml`: Tip
+  icons shown in `HomeScreen`.
+- `app/src/main/res/drawable/camera_icon.xml`, `timer_icon.xml`: Present in `res/drawable` but not
+  currently referenced in the app code.
 
 ## License
 

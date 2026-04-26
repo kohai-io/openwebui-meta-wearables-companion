@@ -1,6 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2" project="openwebuibridge">
 
+    <string name="app_name">OpenWebUI for Meta Glasses</string>
+    <string name="brand_title_primary">Open WebUI</string>
+    <string name="brand_title_accent">Companion</string>
+    <string name="tab_chat">Chat</string>
+    <string name="tab_connections">Connections</string>
+    <string name="status_connected">Connected</string>
+    <string name="status_disconnected">Not connected</string>
+    <string name="tap_to_speak">Tap to speak</string>
+    <string name="say_hey_meta">or say \"Hey Meta, talk to Open WebUI\"</string>
+    <string name="quick_summarize">Summarize this</string>
+    <string name="quick_explain">Explain this</string>
+    <string name="quick_translate">Translate</string>
+    <string name="prompt_summarize">Summarize what you can see right now in one short paragraph.</string>
+    <string name="prompt_explain">Explain what is happening in the current view in plain language.</string>
+    <string name="prompt_translate">Read any visible text and translate it to English.</string>
+    <string name="model_ready_caption">You\'re all set. Ask me anything.</string>
+    <string name="model_select_caption">Pick a model in Connections to start.</string>
+
     <!-- Home Screen -->
     <string name="register_button_title" description="Connect App">Connect my glasses</string>
     <string name="unregister_button_title" description="Disconnect App">Disconnect</string>
