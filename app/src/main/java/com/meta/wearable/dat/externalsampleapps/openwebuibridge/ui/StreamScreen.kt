@@ -41,7 +41,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -71,6 +73,7 @@ fun StreamScreen(
 ) {
   val streamUiState by streamViewModel.uiState.collectAsStateWithLifecycle()
   val wearablesUiState by wearablesViewModel.uiState.collectAsStateWithLifecycle()
+  val clipboardManager = LocalClipboardManager.current
   val isCameraStreaming = streamUiState.streamSessionState == StreamSessionState.STREAMING
   val isCameraStarting = streamUiState.streamSessionState == StreamSessionState.STARTING
   val isCameraEnabled = streamUiState.streamSessionState != StreamSessionState.STOPPED
@@ -91,6 +94,9 @@ fun StreamScreen(
                 ChatTab(
                     state = streamUiState,
                     onSelectModel = streamViewModel::updateOpenWebUiModel,
+                    onOpenModelMenu = streamViewModel::refreshOpenWebUiModels,
+                    onSnapshotAsk = { streamViewModel.askOpenWebUiAboutSnapshot() },
+                    onToggleCamera = { streamViewModel.toggleCameraStream() },
                     onQuickPrompt = { prompt ->
                       if (isCameraStreaming) {
                         streamViewModel.askOpenWebUiAboutSnapshot(prompt)
@@ -100,6 +106,11 @@ fun StreamScreen(
                     },
                     onMicTap = { streamViewModel.startVoiceAsk() },
                     onStopListening = { streamViewModel.stopVoiceAsk() },
+                    onCopyResponse = { response ->
+                      clipboardManager.setText(AnnotatedString(response))
+                    },
+                    onSpeakResponse = { streamViewModel.speakResponse() },
+                    onStopSpeakingResponse = { streamViewModel.stopSpeakingResponse() },
                     modifier = Modifier.fillMaxSize(),
                 )
             BottomTab.CONNECTIONS ->

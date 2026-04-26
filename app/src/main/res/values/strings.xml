@@ -9,7 +9,10 @@
     <string name="status_connected">Connected</string>
     <string name="status_disconnected">Not connected</string>
     <string name="tap_to_speak">Tap to speak</string>
-    <string name="say_hey_meta">or say \"Hey Meta, talk to Open WebUI\"</string>
+    <string name="tap_to_interact">Tap to interact</string>
+    <string name="interact_speak">Speak</string>
+    <string name="interact_stream">Stream</string>
+    <string name="interact_snapshot">Snapshot</string>
     <string name="quick_summarize">Summarize this</string>
     <string name="quick_explain">Explain this</string>
     <string name="quick_translate">Translate</string>
@@ -49,6 +52,7 @@
     <string name="openwebui_model" description="Open WebUI model">Model</string>
     <string name="openwebui_load_models" description="Load Open WebUI models button">Load models</string>
     <string name="openwebui_loading_models" description="Open WebUI models loading button">Loading...</string>
+    <string name="openwebui_no_models_available" description="No Open WebUI models available label">No models found</string>
     <string name="openwebui_select_model" description="Select Open WebUI model button">Select model</string>
     <string name="openwebui_new_chat" description="Start a new Open WebUI chat session button">New chat</string>
     <string name="app_theme_mode" description="App theme mode setting label">Theme</string>
@@ -63,6 +67,7 @@
     <string name="openwebui_prompt" description="Open WebUI prompt">Prompt</string>
     <string name="openwebui_ask" description="Ask Open WebUI button">Ask</string>
     <string name="openwebui_snapshot_ask" description="Ask Open WebUI using captured snapshot button">Snapshot ask</string>
+    <string name="openwebui_snapshot_ask_short" description="Short snapshot ask label">Snapshot</string>
     <string name="openwebui_voice_ask" description="Ask Open WebUI using voice button">Voice ask</string>
     <string name="openwebui_asking" description="Open WebUI request in progress">Asking...</string>
     <string name="openwebui_listening" description="Voice recognition in progress">Listening...</string>
@@ -70,7 +75,9 @@
     <string name="bridge_starting" description="Bridge session starting status">Bridge starting</string>
     <string name="bridge_camera_starting" description="Camera stream starting status">Camera starting</string>
     <string name="camera_stream_running" description="Camera stream running status">Camera stream running</string>
+    <string name="camera_stream_running_short" description="Short camera stream running status">Video on</string>
     <string name="camera_stream_off" description="Camera stream off status">Camera stream off</string>
+    <string name="camera_stream_off_short" description="Short camera stream off status">Video off</string>
     <string name="openwebui_response_empty" description="Empty Open WebUI response placeholder">Use voice ask for any question, or start the camera when you want to ask about what the glasses can see.</string>
     <string name="show_settings" description="Show settings button">Show settings</string>
     <string name="hide_settings" description="Hide settings button">Hide settings</string>

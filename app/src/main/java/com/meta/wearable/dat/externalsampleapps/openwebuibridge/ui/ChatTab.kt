@@ -32,10 +32,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.Videocam
+import androidx.compose.material.icons.filled.VideocamOff
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -55,6 +60,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.meta.wearable.dat.camera.types.StreamSessionState
 import com.meta.wearable.dat.externalsampleapps.openwebuibridge.R
 import com.meta.wearable.dat.externalsampleapps.openwebuibridge.stream.StreamUiState
 
@@ -62,26 +68,39 @@ import com.meta.wearable.dat.externalsampleapps.openwebuibridge.stream.StreamUiS
 fun ChatTab(
     state: StreamUiState,
     onSelectModel: (String) -> Unit,
+    onOpenModelMenu: () -> Unit,
+    onSnapshotAsk: () -> Unit,
+    onToggleCamera: () -> Unit,
     onQuickPrompt: (String) -> Unit,
     onMicTap: () -> Unit,
     onStopListening: () -> Unit,
+    onCopyResponse: (String) -> Unit,
+    onSpeakResponse: () -> Unit,
+    onStopSpeakingResponse: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
   Column(
       modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp),
       verticalArrangement = Arrangement.spacedBy(14.dp),
   ) {
-    ConnectionStatusCard(
-        isConnected = state.isBridgeRunning && state.openWebUiBaseUrl.isNotBlank(),
-        endpoint = state.openWebUiBaseUrl.ifBlank { stringResource(R.string.openwebui_base_url) },
-    )
-
-    ModelCard(
-        model = state.openWebUiModel,
-        availableModels = state.openWebUiModels,
-        onSelectModel = onSelectModel,
-        ready = state.openWebUiModel.isNotBlank(),
-    )
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+      ConnectionStatusPill(
+          isConnected = state.isBridgeRunning && state.openWebUiBaseUrl.isNotBlank(),
+      )
+      ModelCard(
+          model = state.openWebUiModel,
+          availableModels = state.openWebUiModels,
+          loadingModels = state.isLoadingOpenWebUiModels,
+          onSelectModel = onSelectModel,
+          onOpenMenu = onOpenModelMenu,
+          ready = state.openWebUiModel.isNotBlank(),
+          modifier = Modifier.weight(1f),
+      )
+    }
 
     Column(
         modifier = Modifier
@@ -90,32 +109,40 @@ fun ChatTab(
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-      ChatMessages(state = state)
+      ChatMessages(
+          state = state,
+          onCopyResponse = onCopyResponse,
+          onSpeakResponse = onSpeakResponse,
+          onStopSpeakingResponse = onStopSpeakingResponse,
+      )
     }
 
-    QuickActionRow(
-        enabled = !state.isAskingOpenWebUi,
-        onQuickPrompt = onQuickPrompt,
-    )
-
-    MicCenterpiece(
+    InteractionMenu(
         listening = state.isListeningForVoice,
+        streamState = state.streamSessionState,
         busy = state.isAskingOpenWebUi,
-        onTap = if (state.isListeningForVoice) onStopListening else onMicTap,
+        capturing = state.isCapturing,
+        onSpeak = if (state.isListeningForVoice) onStopListening else onMicTap,
+        onToggleCamera = onToggleCamera,
+        onSnapshotAsk = onSnapshotAsk,
     )
   }
 }
 
 @Composable
-private fun ConnectionStatusCard(isConnected: Boolean, endpoint: String) {
+private fun ConnectionStatusPill(isConnected: Boolean) {
   Surface(
-      modifier = Modifier.fillMaxWidth(),
-      shape = RoundedCornerShape(16.dp),
-      color = MaterialTheme.colorScheme.surface,
-      border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+      shape = RoundedCornerShape(999.dp),
+      color = if (isConnected) AppColor.Green.copy(alpha = 0.12f)
+          else MaterialTheme.colorScheme.surface,
+      border = androidx.compose.foundation.BorderStroke(
+          1.dp,
+          if (isConnected) AppColor.Green.copy(alpha = 0.28f)
+          else MaterialTheme.colorScheme.outline,
+      ),
   ) {
     Row(
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -127,22 +154,14 @@ private fun ConnectionStatusCard(isConnected: Boolean, endpoint: String) {
                   shape = CircleShape,
               ),
       )
-      Column(modifier = Modifier.weight(1f)) {
-        Text(
-            text = stringResource(
-                if (isConnected) R.string.status_connected else R.string.status_disconnected
-            ),
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        Text(
-            text = endpoint,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-        )
-      }
+      Text(
+          text = stringResource(
+              if (isConnected) R.string.status_connected else R.string.status_disconnected
+          ),
+          style = MaterialTheme.typography.labelLarge,
+          fontWeight = FontWeight.SemiBold,
+          color = MaterialTheme.colorScheme.onSurface,
+      )
     }
   }
 }
@@ -151,13 +170,16 @@ private fun ConnectionStatusCard(isConnected: Boolean, endpoint: String) {
 private fun ModelCard(
     model: String,
     availableModels: List<String>,
+    loadingModels: Boolean,
     onSelectModel: (String) -> Unit,
+    onOpenMenu: () -> Unit,
     ready: Boolean,
+    modifier: Modifier = Modifier,
 ) {
   var menuExpanded by remember { mutableStateOf(false) }
   Surface(
-      modifier = Modifier.fillMaxWidth(),
-      shape = RoundedCornerShape(16.dp),
+      modifier = modifier,
+      shape = RoundedCornerShape(999.dp),
       color = MaterialTheme.colorScheme.surface,
       border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
   ) {
@@ -165,25 +187,19 @@ private fun ModelCard(
       Row(
           modifier = Modifier
               .fillMaxWidth()
-              .clickable(enabled = availableModels.isNotEmpty()) { menuExpanded = true }
-              .padding(14.dp),
-          horizontalArrangement = Arrangement.spacedBy(12.dp),
+              .clickable {
+                menuExpanded = true
+                onOpenMenu()
+              }
+              .padding(horizontal = 12.dp, vertical = 8.dp),
+          horizontalArrangement = Arrangement.spacedBy(8.dp),
           verticalAlignment = Alignment.CenterVertically,
       ) {
-        BrandAvatar(size = 40.dp)
         Column(modifier = Modifier.weight(1f)) {
           Text(
               text = model.ifBlank { stringResource(R.string.openwebui_model_not_selected) },
-              style = MaterialTheme.typography.titleMedium,
+              style = MaterialTheme.typography.labelLarge,
               fontWeight = FontWeight.SemiBold,
-              maxLines = 1,
-          )
-          Text(
-              text = stringResource(
-                  if (ready) R.string.model_ready_caption else R.string.model_select_caption
-              ),
-              style = MaterialTheme.typography.bodySmall,
-              color = MaterialTheme.colorScheme.onSurfaceVariant,
               maxLines = 1,
           )
         }
@@ -197,16 +213,106 @@ private fun ModelCard(
           expanded = menuExpanded,
           onDismissRequest = { menuExpanded = false },
       ) {
-        availableModels.forEach { m ->
-          DropdownMenuItem(
-              text = { Text(m) },
-              onClick = {
-                onSelectModel(m)
-                menuExpanded = false
-              },
-          )
+        when {
+          loadingModels -> {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.openwebui_loading_models)) },
+                onClick = {},
+                enabled = false,
+            )
+          }
+          availableModels.isEmpty() -> {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.openwebui_no_models_available)) },
+                onClick = {},
+                enabled = false,
+            )
+          }
+          else -> {
+            availableModels.forEach { m ->
+              DropdownMenuItem(
+                  text = { Text(m) },
+                  onClick = {
+                    onSelectModel(m)
+                    menuExpanded = false
+                  },
+              )
+            }
+          }
         }
       }
+    }
+  }
+}
+
+@Composable
+private fun CameraActionRow(
+    streamState: StreamSessionState,
+    busy: Boolean,
+    onSnapshotAsk: () -> Unit,
+    onToggleCamera: () -> Unit,
+) {
+  Row(
+      modifier = Modifier.fillMaxWidth(),
+      horizontalArrangement = Arrangement.spacedBy(8.dp),
+  ) {
+    CompactActionChip(
+        label =
+            when (streamState) {
+              StreamSessionState.STREAMING -> stringResource(R.string.camera_stream_running_short)
+              StreamSessionState.STARTING -> stringResource(R.string.bridge_camera_starting)
+              else -> stringResource(R.string.camera_stream_off_short)
+            },
+        icon =
+            if (streamState == StreamSessionState.STREAMING) Icons.Default.Videocam
+            else Icons.Default.VideocamOff,
+        enabled = streamState != StreamSessionState.STARTING,
+        onClick = onToggleCamera,
+        modifier = if (streamState == StreamSessionState.STREAMING) Modifier.weight(1f) else Modifier.fillMaxWidth(),
+    )
+    if (streamState == StreamSessionState.STREAMING) {
+      CompactActionChip(
+          label = stringResource(R.string.openwebui_snapshot_ask_short),
+          icon = Icons.Default.CameraAlt,
+          enabled = !busy,
+          onClick = onSnapshotAsk,
+          modifier = Modifier.weight(1f),
+      )
+    }
+  }
+}
+
+@Composable
+private fun CompactActionChip(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+  Surface(
+      modifier = modifier.clickable(enabled = enabled, onClick = onClick),
+      shape = RoundedCornerShape(16.dp),
+      color = MaterialTheme.colorScheme.surface,
+      border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+  ) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+      Icon(
+          imageVector = icon,
+          contentDescription = null,
+          tint = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+          modifier = Modifier.size(16.dp),
+      )
+      Text(
+          text = label,
+          style = MaterialTheme.typography.labelMedium,
+          color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+          maxLines = 1,
+      )
     }
   }
 }
@@ -234,7 +340,12 @@ fun BrandAvatar(size: androidx.compose.ui.unit.Dp) {
 }
 
 @Composable
-private fun ChatMessages(state: StreamUiState) {
+private fun ChatMessages(
+    state: StreamUiState,
+    onCopyResponse: (String) -> Unit,
+    onSpeakResponse: () -> Unit,
+    onStopSpeakingResponse: () -> Unit,
+) {
   val hasConversation =
       state.openWebUiResponse != null ||
           state.openWebUiError != null ||
@@ -254,7 +365,14 @@ private fun ChatMessages(state: StreamUiState) {
   when {
     state.isAskingOpenWebUi -> AssistantBubble(text = "Thinking...")
     state.openWebUiError != null -> ErrorBubble(text = state.openWebUiError)
-    state.openWebUiResponse != null -> AssistantBubble(text = state.openWebUiResponse)
+    state.openWebUiResponse != null ->
+        AssistantBubble(
+            text = state.openWebUiResponse,
+            isSpeaking = state.isSpeakingResponse,
+            onCopyResponse = { onCopyResponse(state.openWebUiResponse) },
+            onSpeakResponse = onSpeakResponse,
+            onStopSpeakingResponse = onStopSpeakingResponse,
+        )
   }
 }
 
@@ -312,31 +430,75 @@ private fun UserBubble(text: String) {
 }
 
 @Composable
-private fun AssistantBubble(text: String) {
-  Row(
-      modifier = Modifier.fillMaxWidth(),
-      horizontalArrangement = Arrangement.Start,
-      verticalAlignment = Alignment.Top,
-  ) {
-    Icon(
-        imageVector = Icons.Default.GraphicEq,
-        contentDescription = null,
-        tint = AppColor.Green,
-        modifier = Modifier.size(18.dp).padding(top = 6.dp),
-    )
-    Spacer(modifier = Modifier.size(6.dp))
-    Surface(
-        modifier = Modifier.widthIn(max = 280.dp),
-        shape = RoundedCornerShape(20.dp, 20.dp, 20.dp, 4.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant,
+private fun AssistantBubble(
+    text: String,
+    isSpeaking: Boolean = false,
+    onCopyResponse: (() -> Unit)? = null,
+    onSpeakResponse: (() -> Unit)? = null,
+    onStopSpeakingResponse: (() -> Unit)? = null,
+) {
+  Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.Start,
+        verticalAlignment = Alignment.Top,
     ) {
-      Text(
-          text = text,
-          modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-          style = MaterialTheme.typography.bodyMedium,
-          color = MaterialTheme.colorScheme.onSurface,
+      Icon(
+          imageVector = Icons.Default.GraphicEq,
+          contentDescription = null,
+          tint = AppColor.Green,
+          modifier = Modifier.size(18.dp).padding(top = 6.dp),
+      )
+      Spacer(modifier = Modifier.size(6.dp))
+      Surface(
+          modifier = Modifier.widthIn(max = 280.dp),
+          shape = RoundedCornerShape(20.dp, 20.dp, 20.dp, 4.dp),
+          color = MaterialTheme.colorScheme.surfaceVariant,
+      ) {
+        Text(
+            text = text,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+      }
+    }
+    if (onCopyResponse != null && onSpeakResponse != null && onStopSpeakingResponse != null) {
+      ResponseActionRow(
+          isSpeaking = isSpeaking,
+          onCopyResponse = onCopyResponse,
+          onSpeakResponse = onSpeakResponse,
+          onStopSpeakingResponse = onStopSpeakingResponse,
       )
     }
+  }
+}
+
+@Composable
+private fun ResponseActionRow(
+    isSpeaking: Boolean,
+    onCopyResponse: () -> Unit,
+    onSpeakResponse: () -> Unit,
+    onStopSpeakingResponse: () -> Unit,
+) {
+  Row(
+      modifier = Modifier.fillMaxWidth(),
+      horizontalArrangement = Arrangement.spacedBy(8.dp),
+  ) {
+    CompactActionChip(
+        label = stringResource(R.string.copy_response),
+        icon = Icons.Default.ContentCopy,
+        enabled = true,
+        onClick = onCopyResponse,
+        modifier = Modifier.weight(1f),
+    )
+    CompactActionChip(
+        label = stringResource(if (isSpeaking) R.string.stop_speaking_response else R.string.speak_response),
+        icon = if (isSpeaking) Icons.Default.Stop else Icons.Default.VolumeUp,
+        enabled = true,
+        onClick = if (isSpeaking) onStopSpeakingResponse else onSpeakResponse,
+        modifier = Modifier.weight(1f),
+    )
   }
 }
 
@@ -414,8 +576,17 @@ private fun QuickChip(
 }
 
 @Composable
-private fun MicCenterpiece(listening: Boolean, busy: Boolean, onTap: () -> Unit) {
-  val transition = rememberInfiniteTransition(label = "mic-pulse")
+private fun InteractionMenu(
+    listening: Boolean,
+    streamState: StreamSessionState,
+    busy: Boolean,
+    capturing: Boolean,
+    onSpeak: () -> Unit,
+    onToggleCamera: () -> Unit,
+    onSnapshotAsk: () -> Unit,
+) {
+  var expanded by remember { mutableStateOf(false) }
+  val transition = rememberInfiniteTransition(label = "interact-pulse")
   val pulse by transition.animateFloat(
       initialValue = 1f,
       targetValue = if (listening) 1.12f else 1f,
@@ -423,14 +594,53 @@ private fun MicCenterpiece(listening: Boolean, busy: Boolean, onTap: () -> Unit)
           animation = tween(durationMillis = 700),
           repeatMode = RepeatMode.Reverse,
       ),
-      label = "mic-pulse",
+      label = "interact-pulse",
   )
+  val streamEnabled = streamState != StreamSessionState.STARTING
+  val snapshotEnabled = streamState == StreamSessionState.STREAMING && !busy && !capturing
 
   Column(
       modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 12.dp),
       horizontalAlignment = Alignment.CenterHorizontally,
-      verticalArrangement = Arrangement.spacedBy(6.dp),
+      verticalArrangement = Arrangement.spacedBy(8.dp),
   ) {
+    if (expanded) {
+      Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(8.dp),
+      ) {
+        InteractionMenuButton(
+            label = stringResource(if (listening) R.string.stop_speaking_response else R.string.interact_speak),
+            icon = if (listening) Icons.Default.Stop else Icons.Default.Mic,
+            enabled = !busy || listening,
+            onClick = {
+              onSpeak()
+              if (!listening) expanded = false
+            },
+            modifier = Modifier.weight(1f),
+        )
+        InteractionMenuButton(
+            label = stringResource(R.string.interact_stream),
+            icon = if (streamState == StreamSessionState.STREAMING) Icons.Default.Videocam else Icons.Default.VideocamOff,
+            enabled = streamEnabled,
+            onClick = {
+              onToggleCamera()
+              expanded = false
+            },
+            modifier = Modifier.weight(1f),
+        )
+        InteractionMenuButton(
+            label = stringResource(R.string.interact_snapshot),
+            icon = Icons.Default.CameraAlt,
+            enabled = snapshotEnabled,
+            onClick = {
+              onSnapshotAsk()
+              expanded = false
+            },
+            modifier = Modifier.weight(1f),
+        )
+      }
+    }
     Box(
         modifier = Modifier
             .size(72.dp)
@@ -442,25 +652,63 @@ private fun MicCenterpiece(listening: Boolean, busy: Boolean, onTap: () -> Unit)
                 shape = CircleShape,
             )
             .border(2.dp, Color.White.copy(alpha = 0.08f), CircleShape)
-            .clickable(enabled = !busy, onClick = onTap),
+            .clickable(enabled = !busy || listening) { expanded = !expanded },
         contentAlignment = Alignment.Center,
     ) {
       Icon(
-          imageVector = if (listening) Icons.Default.Stop else Icons.Default.Mic,
+          imageVector = if (listening) Icons.Default.Stop else Icons.Default.AutoAwesome,
           contentDescription = null,
           tint = Color.White,
           modifier = Modifier.size(32.dp),
       )
     }
     Text(
-        text = stringResource(R.string.tap_to_speak),
+        text = stringResource(R.string.tap_to_interact),
         style = MaterialTheme.typography.labelLarge,
         color = MaterialTheme.colorScheme.onSurface,
     )
-    Text(
-        text = stringResource(R.string.say_hey_meta),
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
+  }
+}
+
+@Composable
+private fun InteractionMenuButton(
+    label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+  Surface(
+      modifier = modifier
+          .height(64.dp)
+          .clickable(enabled = enabled, onClick = onClick),
+      shape = RoundedCornerShape(22.dp),
+      color = MaterialTheme.colorScheme.surface,
+      border = androidx.compose.foundation.BorderStroke(
+          1.dp,
+          if (enabled) AppColor.BrandPurple.copy(alpha = 0.28f)
+          else MaterialTheme.colorScheme.outline,
+      ),
+  ) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically),
+    ) {
+      Icon(
+          imageVector = icon,
+          contentDescription = null,
+          tint = if (enabled) MaterialTheme.colorScheme.onSurface
+              else MaterialTheme.colorScheme.onSurfaceVariant,
+          modifier = Modifier.size(20.dp),
+      )
+      Text(
+          text = label,
+          style = MaterialTheme.typography.labelMedium,
+          color = if (enabled) MaterialTheme.colorScheme.onSurface
+              else MaterialTheme.colorScheme.onSurfaceVariant,
+          maxLines = 1,
+      )
+    }
   }
 }
