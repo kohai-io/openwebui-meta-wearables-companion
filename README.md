@@ -71,5 +71,13 @@ emulator URLs. Use HTTPS and stricter network security settings for a production
 
 ## License
 
-This source code is licensed under the license found in the LICENSE file in the root directory of
-this source tree.
+This repository's original source code is licensed under the Apache License 2.0.
+
+This project integrates with the Meta Wearables Device Access Toolkit. Use of the Wearables Device
+Access Toolkit is subject to the Meta Wearables Developer Terms and Acceptable Use Policy:
+
+- https://wearables.developer.meta.com/terms
+- https://wearables.developer.meta.com/acceptable-use-policy
+
+This repository does not relicense Meta's SDKs, documentation, services, trademarks, or other Meta
+materials.
