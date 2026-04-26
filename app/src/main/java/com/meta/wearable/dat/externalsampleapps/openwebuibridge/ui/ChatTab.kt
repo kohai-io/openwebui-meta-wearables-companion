@@ -23,6 +23,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -30,6 +31,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -38,7 +40,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CameraAlt
-import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Image
@@ -55,11 +57,13 @@ import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -72,8 +76,11 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.unit.dp
 import com.meta.wearable.dat.camera.types.StreamSessionState
 import com.meta.wearable.dat.externalsampleapps.openwebuibridge.R
@@ -104,6 +111,20 @@ fun ChatTab(
     onStopSpeakingResponse: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+  var previewImage by remember { mutableStateOf<ImagePreview?>(null) }
+  val messageScrollState = rememberScrollState()
+  LaunchedEffect(
+      state.openWebUiChatId,
+      state.openWebUiChatMessages.size,
+      state.isLoadingOpenWebUiChatHistory,
+      state.isAskingOpenWebUi,
+      state.openWebUiResponse,
+      state.openWebUiError,
+  ) {
+    if (!state.isLoadingOpenWebUiChatHistory) {
+      messageScrollState.animateScrollTo(messageScrollState.maxValue)
+    }
+  }
   Column(
       modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp),
       verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -137,13 +158,14 @@ fun ChatTab(
         modifier = Modifier
             .weight(1f, fill = true)
             .fillMaxWidth()
-            .verticalScroll(rememberScrollState()),
+            .verticalScroll(messageScrollState),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
       ChatMessages(
           state = state,
           onCopyResponse = onCopyResponse,
           onDownloadFile = onDownloadFile,
+          onOpenImage = { bitmap, label -> previewImage = ImagePreview(bitmap, label) },
           onSpeakResponse = onSpeakResponse,
           onStopSpeakingResponse = onStopSpeakingResponse,
       )
@@ -158,6 +180,10 @@ fun ChatTab(
         onToggleCamera = onToggleCamera,
         onSnapshotAsk = onSnapshotAsk,
     )
+  }
+
+  previewImage?.let { image ->
+    FullscreenImageDialog(image = image, onDismiss = { previewImage = null })
   }
 }
 
@@ -478,6 +504,7 @@ private fun ChatMessages(
     state: StreamUiState,
     onCopyResponse: (String) -> Unit,
     onDownloadFile: (String, String, String) -> Unit,
+    onOpenImage: (Bitmap, String) -> Unit,
     onSpeakResponse: () -> Unit,
     onStopSpeakingResponse: () -> Unit,
 ) {
@@ -508,6 +535,7 @@ private fun ChatMessages(
         isSpeaking = state.isSpeakingResponse,
         onCopyResponse = onCopyResponse,
         onDownloadFile = onDownloadFile,
+        onOpenImage = onOpenImage,
         onSpeakResponse = onSpeakResponse,
         onStopSpeakingResponse = onStopSpeakingResponse,
     )
@@ -521,20 +549,23 @@ private fun ChatMessages(
             text = userText,
             baseUrl = state.openWebUiBaseUrl,
             apiKey = state.openWebUiApiKey,
+            onCopyText = onCopyResponse,
             onDownloadFile = onDownloadFile,
+            onOpenImage = onOpenImage,
         )
       }
       AssistantBubble(text = stringResource(R.string.openwebui_thinking))
     }
-    state.openWebUiError != null -> ErrorBubble(text = state.openWebUiError)
+    state.openWebUiError != null -> ErrorBubble(text = state.openWebUiError, onCopyText = onCopyResponse)
     state.openWebUiChatMessages.isEmpty() && state.openWebUiResponse != null ->
         AssistantBubble(
             text = state.openWebUiResponse,
             baseUrl = state.openWebUiBaseUrl,
             apiKey = state.openWebUiApiKey,
             isSpeaking = state.isSpeakingResponse,
-            onCopyResponse = { onCopyResponse(state.openWebUiResponse) },
+            onCopyText = onCopyResponse,
             onDownloadFile = onDownloadFile,
+            onOpenImage = onOpenImage,
             onSpeakResponse = onSpeakResponse,
             onStopSpeakingResponse = onStopSpeakingResponse,
         )
@@ -550,6 +581,7 @@ private fun ChatHistoryBubble(
     isSpeaking: Boolean,
     onCopyResponse: (String) -> Unit,
     onDownloadFile: (String, String, String) -> Unit,
+    onOpenImage: (Bitmap, String) -> Unit,
     onSpeakResponse: () -> Unit,
     onStopSpeakingResponse: () -> Unit,
 ) {
@@ -559,7 +591,9 @@ private fun ChatHistoryBubble(
             text = message.content,
             baseUrl = baseUrl,
             apiKey = apiKey,
+            onCopyText = onCopyResponse,
             onDownloadFile = onDownloadFile,
+            onOpenImage = onOpenImage,
         )
     "assistant" ->
         AssistantBubble(
@@ -567,8 +601,9 @@ private fun ChatHistoryBubble(
             baseUrl = baseUrl,
             apiKey = apiKey,
             isSpeaking = isSpeaking && isLastAssistant,
-            onCopyResponse = { onCopyResponse(message.content) },
+            onCopyText = onCopyResponse,
             onDownloadFile = onDownloadFile,
+            onOpenImage = onOpenImage,
             onSpeakResponse = if (isLastAssistant) onSpeakResponse else null,
             onStopSpeakingResponse = if (isLastAssistant) onStopSpeakingResponse else null,
         )
@@ -612,7 +647,9 @@ private fun UserBubble(
     text: String,
     baseUrl: String = "",
     apiKey: String = "",
+    onCopyText: ((String) -> Unit)? = null,
     onDownloadFile: ((String, String, String) -> Unit)? = null,
+    onOpenImage: ((Bitmap, String) -> Unit)? = null,
 ) {
   Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
     Row(
@@ -620,7 +657,7 @@ private fun UserBubble(
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
       Surface(
-          modifier = Modifier.widthIn(max = 280.dp),
+          modifier = Modifier.widthIn(max = 280.dp).copyOnLongPress(text, onCopyText),
           shape = RoundedCornerShape(20.dp, 20.dp, 4.dp, 20.dp),
           color = AppColor.BrandPurple.copy(alpha = 0.18f),
           border = androidx.compose.foundation.BorderStroke(
@@ -632,6 +669,7 @@ private fun UserBubble(
             baseUrl = baseUrl,
             apiKey = apiKey,
             onDownloadFile = onDownloadFile,
+            onOpenImage = onOpenImage,
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
         )
       }
@@ -651,8 +689,9 @@ private fun AssistantBubble(
     baseUrl: String = "",
     apiKey: String = "",
     isSpeaking: Boolean = false,
-    onCopyResponse: (() -> Unit)? = null,
+    onCopyText: ((String) -> Unit)? = null,
     onDownloadFile: ((String, String, String) -> Unit)? = null,
+    onOpenImage: ((Bitmap, String) -> Unit)? = null,
     onSpeakResponse: (() -> Unit)? = null,
     onStopSpeakingResponse: (() -> Unit)? = null,
 ) {
@@ -670,7 +709,7 @@ private fun AssistantBubble(
       )
       Spacer(modifier = Modifier.size(6.dp))
       Surface(
-          modifier = Modifier.widthIn(max = 280.dp),
+          modifier = Modifier.widthIn(max = 280.dp).copyOnLongPress(text, onCopyText),
           shape = RoundedCornerShape(20.dp, 20.dp, 20.dp, 4.dp),
           color = MaterialTheme.colorScheme.surfaceVariant,
       ) {
@@ -679,14 +718,14 @@ private fun AssistantBubble(
             baseUrl = baseUrl,
             apiKey = apiKey,
             onDownloadFile = onDownloadFile,
+            onOpenImage = onOpenImage,
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
         )
       }
     }
-    if (onCopyResponse != null) {
+    if (onSpeakResponse != null && onStopSpeakingResponse != null) {
       ResponseActionRow(
           isSpeaking = isSpeaking,
-          onCopyResponse = onCopyResponse,
           onSpeakResponse = onSpeakResponse,
           onStopSpeakingResponse = onStopSpeakingResponse,
       )
@@ -697,32 +736,34 @@ private fun AssistantBubble(
 @Composable
 private fun ResponseActionRow(
     isSpeaking: Boolean,
-    onCopyResponse: () -> Unit,
-    onSpeakResponse: (() -> Unit)?,
-    onStopSpeakingResponse: (() -> Unit)?,
+    onSpeakResponse: () -> Unit,
+    onStopSpeakingResponse: () -> Unit,
 ) {
   Row(
       modifier = Modifier.fillMaxWidth(),
       horizontalArrangement = Arrangement.spacedBy(8.dp),
   ) {
     CompactActionChip(
-        label = stringResource(R.string.copy_response),
-        icon = Icons.Default.ContentCopy,
+        label = stringResource(if (isSpeaking) R.string.stop_speaking_response else R.string.speak_response),
+        icon = if (isSpeaking) Icons.Default.Stop else Icons.Default.VolumeUp,
         enabled = true,
-        onClick = onCopyResponse,
+        onClick = if (isSpeaking) onStopSpeakingResponse else onSpeakResponse,
         modifier = Modifier.weight(1f),
     )
-    if (onSpeakResponse != null && onStopSpeakingResponse != null) {
-      CompactActionChip(
-          label = stringResource(if (isSpeaking) R.string.stop_speaking_response else R.string.speak_response),
-          icon = if (isSpeaking) Icons.Default.Stop else Icons.Default.VolumeUp,
-          enabled = true,
-          onClick = if (isSpeaking) onStopSpeakingResponse else onSpeakResponse,
-          modifier = Modifier.weight(1f),
-      )
-    }
   }
 }
+
+private fun Modifier.copyOnLongPress(
+    text: String,
+    onCopyText: ((String) -> Unit)?,
+): Modifier =
+    if (text.isBlank() || onCopyText == null) {
+      this
+    } else {
+      pointerInput(text, onCopyText) {
+        detectTapGestures(onLongPress = { onCopyText(text) })
+      }
+    }
 
 private enum class MarkdownFileType { IMAGE, VIDEO, AUDIO, FILE }
 
@@ -737,12 +778,18 @@ private sealed interface MarkdownPart {
   ) : MarkdownPart
 }
 
+private data class ImagePreview(
+    val bitmap: Bitmap,
+    val label: String,
+)
+
 @Composable
 private fun MarkdownMessageContent(
     text: String,
     baseUrl: String,
     apiKey: String,
     onDownloadFile: ((String, String, String) -> Unit)?,
+    onOpenImage: ((Bitmap, String) -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
   val parts = remember(text) { parseMarkdownParts(text) }
@@ -763,6 +810,7 @@ private fun MarkdownMessageContent(
                 absoluteUrl = absoluteUrl(baseUrl, part.url),
                 apiKey = apiKey,
                 onDownloadFile = onDownloadFile,
+                onOpenImage = onOpenImage,
             )
       }
     }
@@ -775,6 +823,7 @@ private fun MarkdownFileAttachment(
     absoluteUrl: String,
     apiKey: String,
     onDownloadFile: ((String, String, String) -> Unit)?,
+    onOpenImage: ((Bitmap, String) -> Unit)?,
 ) {
   Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
     if (file.type == MarkdownFileType.IMAGE) {
@@ -785,7 +834,13 @@ private fun MarkdownFileAttachment(
         Image(
             bitmap = bitmap!!.asImageBitmap(),
             contentDescription = file.label,
-            modifier = Modifier.fillMaxWidth().height(180.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .height(180.dp)
+                    .clickable(enabled = onOpenImage != null) {
+                      onOpenImage?.invoke(bitmap!!, file.label)
+                    },
             contentScale = ContentScale.Crop,
         )
       }
@@ -829,6 +884,38 @@ private fun MarkdownFileAttachment(
                       onDownloadFile?.invoke(absoluteUrl, file.label, file.mimeType)
                     },
         )
+      }
+    }
+  }
+}
+
+@Composable
+private fun FullscreenImageDialog(
+    image: ImagePreview,
+    onDismiss: () -> Unit,
+) {
+  Dialog(
+      onDismissRequest = onDismiss,
+      properties = DialogProperties(usePlatformDefaultWidth = false),
+  ) {
+    Surface(modifier = Modifier.fillMaxSize(), color = Color.Black) {
+      Box(modifier = Modifier.fillMaxSize()) {
+        Image(
+            bitmap = image.bitmap.asImageBitmap(),
+            contentDescription = image.label,
+            modifier = Modifier.fillMaxSize().padding(16.dp),
+            contentScale = ContentScale.Fit,
+        )
+        IconButton(
+            onClick = onDismiss,
+            modifier = Modifier.align(Alignment.TopEnd).padding(12.dp),
+        ) {
+          Icon(
+              imageVector = Icons.Default.Close,
+              contentDescription = stringResource(R.string.close_image_preview),
+              tint = Color.White,
+          )
+        }
       }
     }
   }
@@ -932,9 +1019,12 @@ private suspend fun loadBitmap(url: String, apiKey: String): Bitmap? =
     }
 
 @Composable
-private fun ErrorBubble(text: String) {
+private fun ErrorBubble(
+    text: String,
+    onCopyText: ((String) -> Unit)? = null,
+) {
   Surface(
-      modifier = Modifier.fillMaxWidth(),
+      modifier = Modifier.fillMaxWidth().copyOnLongPress(text, onCopyText),
       shape = RoundedCornerShape(12.dp),
       color = MaterialTheme.colorScheme.errorContainer,
   ) {

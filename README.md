@@ -5,6 +5,14 @@ Open WebUI server. It streams a frame from Meta glasses, JPEG-encodes the curren
 uploads snapshots through Open WebUI's files API, and sends them to Open WebUI's chat-completions
 API with a user prompt.
 
+<p align="center">
+  <img
+    src="docs/assets/readme/openwebui-companion-info.png"
+    alt="Open WebUI Companion for Meta glasses connected to a private Open WebUI server"
+    width="720"
+  />
+</p>
+
 ## What it demonstrates
 
 - DAT app registration and camera permission flow

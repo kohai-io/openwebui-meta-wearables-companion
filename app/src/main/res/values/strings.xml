@@ -92,8 +92,8 @@
     <string name="show_settings" description="Show settings button">Show settings</string>
     <string name="hide_settings" description="Hide settings button">Hide settings</string>
     <string name="auto_speak_responses" description="Auto speak responses setting">Auto-speak responses</string>
-    <string name="copy_response" description="Copy response button">Copy</string>
     <string name="download_file" description="Download attached file button">Download</string>
+    <string name="close_image_preview" description="Close image preview button">Close image preview</string>
     <string name="share_response" description="Share response button">Share</string>
     <string name="speak_response" description="Speak response button">Speak</string>
     <string name="stop_speaking_response" description="Stop speaking response button">Stop speaking</string>

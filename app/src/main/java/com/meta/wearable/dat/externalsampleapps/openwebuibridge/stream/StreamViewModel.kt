@@ -147,6 +147,10 @@ class StreamViewModel(
   // Presentation queue for buffering frames after color conversion
   private var presentationQueue: PresentationQueue? = null
 
+  init {
+    loadInitialOpenWebUiChat()
+  }
+
   fun updateOpenWebUiBaseUrl(value: String) {
     _uiState.update {
       it.copy(
@@ -377,6 +381,66 @@ class StreamViewModel(
                   openWebUiError = result.message,
               )
             }
+      }
+    }
+  }
+
+  private fun loadInitialOpenWebUiChat() {
+    val state = _uiState.value
+    if (state.openWebUiBaseUrl.isBlank() || state.openWebUiApiKey.isBlank()) {
+      return
+    }
+
+    _uiState.update {
+      it.copy(
+          isLoadingOpenWebUiChats = true,
+          isLoadingOpenWebUiChatHistory = it.openWebUiChatId.isNotBlank(),
+          openWebUiError = null,
+      )
+    }
+    viewModelScope.launch {
+      when (
+          val result =
+              openWebUiClient.listChats(
+                  baseUrl = state.openWebUiBaseUrl,
+                  apiKey = state.openWebUiApiKey,
+              )
+      ) {
+        is OpenWebUiChatsResult.Success -> {
+          val selectedChat =
+              result.chats.firstOrNull { it.id == state.openWebUiChatId }
+                  ?: result.chats.firstOrNull()
+          _uiState.update {
+            it.copy(
+                isLoadingOpenWebUiChats = false,
+                isLoadingOpenWebUiChatHistory = selectedChat != null,
+                openWebUiChats = result.chats,
+                openWebUiChatId = selectedChat?.id.orEmpty(),
+                openWebUiSessionId =
+                    if (selectedChat == null) "" else it.openWebUiSessionId.ifBlank { UUID.randomUUID().toString() },
+                openWebUiChatTitle = selectedChat?.title.orEmpty(),
+                openWebUiChatMessages = emptyList(),
+                openWebUiResponse = null,
+                voiceTranscript = null,
+            )
+          }
+          if (selectedChat != null) {
+            settings.edit()
+                .putString(KEY_OPEN_WEB_UI_CHAT_ID, selectedChat.id)
+                .putString(KEY_OPEN_WEB_UI_SESSION_ID, _uiState.value.openWebUiSessionId)
+                .putString(KEY_OPEN_WEB_UI_CHAT_TITLE, selectedChat.title)
+                .apply()
+            loadSelectedOpenWebUiChatHistory(selectedChat.id)
+          }
+        }
+        is OpenWebUiChatsResult.Failure -> {
+          _uiState.update { it.copy(isLoadingOpenWebUiChats = false) }
+          if (state.openWebUiChatId.isNotBlank()) {
+            loadSelectedOpenWebUiChatHistory(state.openWebUiChatId)
+          } else {
+            _uiState.update { it.copy(isLoadingOpenWebUiChatHistory = false, openWebUiError = result.message) }
+          }
+        }
       }
     }
   }
